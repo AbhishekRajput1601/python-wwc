@@ -5,6 +5,10 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+from app.db.session import get_db
+from app.db.models import USERS_COLLECTION
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
@@ -61,3 +65,46 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         raise credentials_exception
     
     return user_id
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+) -> dict:
+    """Dependency that returns the current user document (raises 401 if invalid)."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authorized to access this route",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+
+    user_id: str = payload.get("sub")
+    if not user_id:
+        raise credentials_exception
+
+    try:
+        user = await db[USERS_COLLECTION].find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        user = None
+
+    if not user:
+        raise credentials_exception
+
+    return user
+
+
+async def require_admin(
+    user: dict = Depends(get_current_user)
+) -> dict:
+    """Dependency that ensures the current user has admin role."""
+    if not user or user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Admins only."
+        )
+    return user

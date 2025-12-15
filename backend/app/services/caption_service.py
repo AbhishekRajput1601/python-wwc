@@ -15,8 +15,7 @@ class CaptionService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.collection = db[CAPTIONS_COLLECTION]
-        
-        # Initialize Whisper model
+  
         self.whisper_model = WhisperModel(
             settings.WHISPER_MODEL_SIZE,
             device="cpu",

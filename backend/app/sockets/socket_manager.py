@@ -1,8 +1,16 @@
 import socketio
 from typing import Dict, Set
 import logging
+import base64
+from typing import Any
 
 from app.core.config import settings
+from app.db.base import get_database
+from app.db.models import MEETINGS_COLLECTION
+from datetime import datetime
+from app.services.caption_service import CaptionService
+from app.services.captions_whisper_service import transcribe_audio
+from app.models.caption import CaptionEntryCreate
 
 
 sio = socketio.AsyncServer(
@@ -100,6 +108,23 @@ async def join_meeting(sid, data):
     
     await sio.emit("existing-participants", existing_participants, to=sid)
 
+    # Send last 100 chat messages as history (if meeting doc exists)
+    try:
+        db = get_database()
+        doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"messages": {"$slice": -100}})
+        history = []
+        if doc and doc.get("messages"):
+            for m in doc.get("messages", []):
+                history.append({
+                    "senderId": str(m.get("sender")) if m.get("sender") else None,
+                    "senderName": m.get("senderName") or "User",
+                    "text": m.get("text"),
+                    "timestamp": int(m.get("timestamp").timestamp() * 1000) if m.get("timestamp") else None,
+                })
+        await sio.emit("chat-history", history, to=sid)
+    except Exception:
+        logger.exception("Failed to load chat history for meeting %s", meeting_id)
+
 
 @sio.event
 async def leave_meeting(sid, data):
@@ -139,10 +164,10 @@ async def webrtc_offer(sid, data):
     
     if target_sid:
         await sio.emit(
-            "webrtc-offer",
+            "offer",
             {
                 "offer": offer,
-                "senderSocketId": sid
+                "fromSocketId": sid
             },
             to=target_sid
         )
@@ -156,10 +181,10 @@ async def webrtc_answer(sid, data):
     
     if target_sid:
         await sio.emit(
-            "webrtc-answer",
+            "answer",
             {
                 "answer": answer,
-                "senderSocketId": sid
+                "fromSocketId": sid
             },
             to=target_sid
         )
@@ -173,10 +198,10 @@ async def webrtc_ice_candidate(sid, data):
     
     if target_sid:
         await sio.emit(
-            "webrtc-ice-candidate",
+            "ice-candidate",
             {
                 "candidate": candidate,
-                "senderSocketId": sid
+                "fromSocketId": sid
             },
             to=target_sid
         )
@@ -194,8 +219,27 @@ async def send_chat_message(sid, data):
             "senderId": user["id"] if user else None,
             "senderName": user["name"] if user else "User",
             "text": text,
-            "timestamp": data.get("timestamp")
+            "timestamp": data.get("timestamp") or int(datetime.utcnow().timestamp() * 1000)
         }
+
+        # persist message to DB
+        try:
+            db = get_database()
+            await db[MEETINGS_COLLECTION].update_one(
+                {"meeting_id": meeting_id},
+                {
+                    "$push": {
+                        "messages": {
+                            "sender": user["id"] if user else None,
+                            "senderName": payload["senderName"],
+                            "text": payload["text"],
+                            "timestamp": datetime.utcfromtimestamp(payload["timestamp"] / 1000.0),
+                        }
+                    }
+                }
+            )
+        except Exception:
+            logger.exception("Failed to persist chat message for meeting %s", meeting_id)
 
         await sio.emit("chat-message", payload, room=meeting_id)
 
@@ -221,6 +265,32 @@ async def start_captions(sid, data):
 
 
 @sio.event
+async def toggle_audio(sid, data):
+    meeting_id = socket_to_meeting.get(sid)
+    is_enabled = data.get("isEnabled") if isinstance(data, dict) else None
+    if meeting_id:
+        await sio.emit(
+            "user-audio-toggle",
+            {"socketId": sid, "isEnabled": is_enabled},
+            room=meeting_id,
+            skip_sid=sid,
+        )
+
+
+@sio.event
+async def toggle_video(sid, data):
+    meeting_id = socket_to_meeting.get(sid)
+    is_enabled = data.get("isEnabled") if isinstance(data, dict) else None
+    if meeting_id:
+        await sio.emit(
+            "user-video-toggle",
+            {"socketId": sid, "isEnabled": is_enabled},
+            room=meeting_id,
+            skip_sid=sid,
+        )
+
+
+@sio.event
 async def audio_data(sid, data):
     """Handle audio data for transcription."""
     meeting_id = data.get("meetingId")
@@ -230,13 +300,87 @@ async def audio_data(sid, data):
     
     if not meeting_id or not audio_data:
         return
-    
+
+    # Normalize audio bytes (support base64 strings, list of ints, or bytes)
+    audio_bytes = None
+    try:
+        if isinstance(audio_data, str):
+            # handle data url like 'data:audio/ogg;base64,...'
+            if audio_data.startswith("data:") and "," in audio_data:
+                _, b64 = audio_data.split(",", 1)
+            else:
+                b64 = audio_data
+            audio_bytes = base64.b64decode(b64)
+        elif isinstance(audio_data, (bytes, bytearray)):
+            audio_bytes = bytes(audio_data)
+        elif isinstance(audio_data, list):
+            audio_bytes = bytes(bytearray(audio_data))
+        else:
+            logger.warning("Unsupported audio data type: %s", type(audio_data))
+            return
+    except Exception as e:
+        logger.exception("Failed to decode audio data: %s", e)
+        return
 
     user = socket_to_user.get(sid)
     speaker_name = user["name"] if user else "Unknown"
     speaker_id = user["id"] if user else None
-    
+
     logger.info(f"Received audio data from {speaker_name} in meeting {meeting_id}")
+
+    # Transcribe using external whisper HTTP service (async)
+    try:
+        result = await transcribe_audio(audio_bytes, language=language, translate=translate)
+    except Exception as e:
+        logger.exception("Transcription failed: %s", e)
+        return
+
+    captions = result.get("captions") or []
+    resp_lang = result.get("language") or language
+
+    if not captions:
+        return
+
+    # Persist and emit each caption segment
+    try:
+        db = get_database()
+        caption_service = CaptionService(db)
+
+        for seg in captions:
+            text = seg.get("text") or seg.get("sentence") or ""
+            start = seg.get("start") or seg.get("t_start") or 0.0
+            end = seg.get("end") or seg.get("t_end") or 0.0
+            duration = max(0.0, float(end) - float(start))
+
+            caption_entry = CaptionEntryCreate(
+                speaker=speaker_id,
+                speaker_name=speaker_name,
+                original_text=text,
+                original_language=resp_lang,
+                translations=[],
+                confidence=0.8,
+                duration=duration,
+                is_final=True,
+            )
+
+            try:
+                await caption_service.add_caption(meeting_id, caption_entry)
+            except Exception:
+                logger.exception("Failed to save caption for meeting %s", meeting_id)
+
+            payload: Any = {
+                "meetingId": meeting_id,
+                "speakerId": speaker_id,
+                "speakerName": speaker_name,
+                "text": text,
+                "start": start,
+                "end": end,
+                "duration": duration,
+            }
+
+            await sio.emit("caption-update", payload, room=meeting_id)
+    except Exception:
+        logger.exception("Error processing captions for meeting %s", meeting_id)
 
 
 @sio.event
@@ -248,6 +392,79 @@ async def new_caption(sid, data):
     if meeting_id and caption:
  
         await sio.emit("caption-update", caption, room=meeting_id)
+
+
+# Compatibility aliases for client event names (dashed)
+@sio.on("join-meeting")
+async def on_join_meeting(sid, data):
+    return await join_meeting(sid, data)
+
+
+@sio.on("leave-meeting")
+async def on_leave_meeting(sid, data=None):
+    return await leave_meeting(sid, data or {})
+
+
+@sio.on("get-chat-history")
+async def on_get_chat_history(sid):
+    meeting_id = socket_to_meeting.get(sid)
+    if not meeting_id:
+        return
+    try:
+        db = get_database()
+        doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"messages": {"$slice": -100}})
+        history = []
+        if doc and doc.get("messages"):
+            for m in doc.get("messages", []):
+                history.append({
+                    "senderId": str(m.get("sender")) if m.get("sender") else None,
+                    "senderName": m.get("senderName") or "User",
+                    "text": m.get("text"),
+                    "timestamp": int(m.get("timestamp").timestamp() * 1000) if m.get("timestamp") else None,
+                })
+        await sio.emit("chat-history", history, to=sid)
+    except Exception:
+        logger.exception("Failed to load chat history (on-demand) for %s", meeting_id)
+
+
+@sio.on("send-chat-message")
+async def on_send_chat_message(sid, data):
+    return await send_chat_message(sid, data)
+
+
+@sio.on("offer")
+async def on_offer(sid, data):
+    return await webrtc_offer(sid, data)
+
+
+@sio.on("answer")
+async def on_answer(sid, data):
+    return await webrtc_answer(sid, data)
+
+
+@sio.on("ice-candidate")
+async def on_ice_candidate(sid, data):
+    return await webrtc_ice_candidate(sid, data)
+
+
+@sio.on("toggle-audio")
+async def on_toggle_audio(sid, data):
+    return await toggle_audio(sid, data)
+
+
+@sio.on("toggle-video")
+async def on_toggle_video(sid, data):
+    return await toggle_video(sid, data)
+
+
+@sio.on("start-screen-share")
+async def on_start_screen_share(sid, data=None):
+    return await start_screen_share(sid)
+
+
+@sio.on("stop-screen-share")
+async def on_stop_screen_share(sid, data=None):
+    return await stop_screen_share(sid)
 
 
 @sio.event

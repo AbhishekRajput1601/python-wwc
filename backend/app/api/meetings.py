@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.meeting import MeetingCreate, MeetingUpdate
 from app.services.meeting_service import MeetingService
 from app.core.security import get_current_user_id
+from fastapi.responses import PlainTextResponse
 
 router = APIRouter()
 
@@ -160,6 +161,7 @@ async def end_meeting(
 
 
 @router.delete("/{meeting_id}", response_model=dict)
+@router.delete("/delete-meeting/{meeting_id}", response_model=dict)
 async def delete_meeting(
     meeting_id: str,
     user_id: str = Depends(get_current_user_id),
@@ -187,6 +189,124 @@ async def delete_meeting(
         "success": True,
         "message": "Meeting deleted successfully"
     }
+
+
+
+@router.post("/add-user-in-meeting", response_model=dict)
+async def add_user_in_meeting(
+    payload: dict,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Add a user into a meeting. Expects JSON: {"meetingId": "...", "userId": "..."}"""
+    meeting_id = payload.get("meetingId") or payload.get("meeting_id")
+    target_user = payload.get("userId") or payload.get("user_id")
+    if not meeting_id or not target_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="meetingId and userId are required")
+
+    meeting_service = MeetingService(db)
+    meeting = await meeting_service.get_meeting_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    # Only host or admin can add users
+    is_host = meeting.get("host") == user_id
+    if not is_host:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add users to this meeting")
+
+    updated = await meeting_service.add_user_in_meeting(meeting_id, target_user)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add user to meeting")
+
+    return {"success": True, "message": "User added to meeting", "data": updated}
+
+
+
+
+@router.post("/{meeting_id}/recordings", response_model=dict)
+async def upload_recording(
+    meeting_id: str,
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    meeting_service = MeetingService(db)
+
+    # Authorization check: host or participant or admin
+    meeting = await meeting_service.get_meeting_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    is_host = meeting.get("host") == user_id
+    participants = meeting.get("participants", [])
+    is_participant = any((p.get("user") == user_id) for p in participants)
+    # note: admin role check can be done in security dependency if available
+
+    if not (is_host or is_participant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to upload recordings for this meeting")
+
+    contents = await file.read()
+    recording = await meeting_service.upload_recording(meeting_id, user_id, contents, file.filename or "upload.mp4")
+
+    if not recording:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload recording")
+
+    return {"success": True, "recording": recording}
+
+
+@router.get("/{meeting_id}/recordings", response_model=dict)
+async def get_recordings(
+    meeting_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    meeting_service = MeetingService(db)
+    recs = await meeting_service.get_recordings_for_user(meeting_id, user_id)
+    return {"success": True, "recordings": recs}
+
+
+@router.get("/{meeting_id}/recordings/{recording_id}", response_model=dict)
+async def get_recording(
+    meeting_id: str,
+    recording_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    meeting_service = MeetingService(db)
+    rec = await meeting_service.get_recording_by_id(meeting_id, recording_id)
+    if not rec:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
+
+    # ensure owner
+    if rec.get("uploaded_by") != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this recording")
+
+    return {"success": True, "recording": rec}
+
+
+@router.get("/{meeting_id}/captions/text", response_class=PlainTextResponse)
+async def get_meeting_captions_text(
+    meeting_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    meeting_service = MeetingService(db)
+    meeting = await meeting_service.get_meeting_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    is_host = meeting.get("host") == user_id
+    participants = meeting.get("participants", [])
+    is_participant = any((p.get("user") == user_id) for p in participants)
+
+    if not (is_host or is_participant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view captions")
+
+    text = await meeting_service.get_meeting_captions_text(meeting_id)
+    if not text:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No captions available for this meeting")
+
+    return PlainTextResponse(content=text)
 
 
 @router.post("/{meeting_id}/chat", response_model=dict)

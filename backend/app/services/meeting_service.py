@@ -6,6 +6,13 @@ import uuid
 
 from app.db.models import MEETINGS_COLLECTION, USERS_COLLECTION
 from app.models.meeting import MeetingCreate, MeetingUpdate
+import tempfile
+import os
+import time
+import asyncio
+import logging
+
+from app.core.cloudinary import upload_file as cloudinary_upload_file
 
 
 class MeetingService:
@@ -188,6 +195,147 @@ class MeetingService:
         if result:
             return self._serialize_meeting(result)
         return None
+
+    async def add_user_in_meeting(self, meeting_id: str, user_id: str) -> Optional[dict]:
+        """Add a user into meeting participants if not already present."""
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return None
+
+        already = any(p.get("user") == user_id for p in meeting.get("participants", []))
+        if already:
+            return self._serialize_meeting(meeting)
+
+        participant = {
+            "user": user_id,
+            "joined_at": datetime.utcnow(),
+            "left_at": None,
+            "is_active": True
+        }
+
+        await self.collection.update_one({"meeting_id": meeting_id}, {"$push": {"participants": participant}})
+        updated = await self.collection.find_one({"meeting_id": meeting_id})
+        return self._serialize_meeting(updated)
+
+    async def upload_recording(self, meeting_id: str, user_id: str, file_bytes: bytes, filename: str) -> Optional[dict]:
+        """Upload a recording to Cloudinary and attach metadata to the meeting.
+
+        Returns the recording metadata dict on success, or None if meeting not found.
+        """
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return None
+
+        rec_id = str(ObjectId())
+        file_size = len(file_bytes) if file_bytes is not None else 0
+
+        placeholder = {
+            "id": rec_id,
+            "public_id": None,
+            "url_high": None,
+            "url_low": None,
+            "duration": None,
+            "bytes": file_size,
+            "uploaded_at": datetime.utcnow(),
+            "uploaded_by": user_id,
+            "status": "processing"
+        }
+
+        await self.collection.update_one({"meeting_id": meeting_id}, {"$push": {"recordings": placeholder}})
+
+        # Persist bytes to a temp file for upload
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(filename)[1] or ".mp4")
+            with os.fdopen(fd, "wb") as tmp_file:
+                tmp_file.write(file_bytes)
+
+            upload_options = {
+                "resource_type": "video",
+                "folder": "meetings",
+                "use_filename": True,
+                "unique_filename": True,
+                "overwrite": False,
+                "eager": [{"format": "mp4", "quality": "auto:low", "width": 144, "crop": "limit"}]
+            }
+
+            RETRIES = 3
+            upload_result = None
+            for attempt in range(1, RETRIES + 1):
+                try:
+                    # Use central upload helper in a thread to avoid blocking the event loop
+                    # Pass options via extra_options param
+                    upload_result = await asyncio.to_thread(
+                        cloudinary_upload_file,
+                        tmp_path,
+                        None,
+                        None,
+                        upload_options,
+                    )
+                    break
+                except Exception as exc:
+                    logging.exception("Cloudinary upload attempt %s failed", attempt)
+                    if attempt == RETRIES:
+                        raise
+                    time.sleep(1 * attempt)
+
+            if upload_result:
+                update_fields = {
+                    "recordings.$[r].public_id": upload_result.get("public_id"),
+                    "recordings.$[r].url_high": upload_result.get("secure_url") or upload_result.get("url"),
+                    "recordings.$[r].url_low": (upload_result.get("eager") and upload_result.get("eager")[0].get("secure_url")) or None,
+                    "recordings.$[r].duration": upload_result.get("duration"),
+                    "recordings.$[r].bytes": upload_result.get("bytes") or file_size,
+                    "recordings.$[r].uploaded_at": datetime.utcnow(),
+                    "recordings.$[r].status": "ready"
+                }
+
+                await self.collection.update_one({"meeting_id": meeting_id}, {"$set": update_fields}, array_filters=[{"r.id": rec_id}])
+                updated_meeting = await self.collection.find_one({"meeting_id": meeting_id})
+                # return the recording metadata
+                recs = updated_meeting.get("recordings", [])
+                for r in recs:
+                    if r.get("id") == rec_id:
+                        return r
+
+        except Exception as exc:
+            logging.exception("Failed to upload recording for meeting %s: %s", meeting_id, exc)
+            # mark recording as failed
+            try:
+                await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"recordings.$[r].status": "failed"}}, array_filters=[{"r.id": rec_id}])
+            except Exception:
+                logging.exception("Failed to mark recording status as failed in DB for meeting %s", meeting_id)
+            return None
+        finally:
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+        return None
+
+    async def get_recordings_for_user(self, meeting_id: str, user_id: str) -> List[dict]:
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return []
+        recs = meeting.get("recordings", [])
+        return [r for r in recs if r.get("uploaded_by") == user_id]
+
+    async def get_recording_by_id(self, meeting_id: str, recording_id: str) -> Optional[dict]:
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return None
+        for r in meeting.get("recordings", []):
+            if r.get("id") == recording_id:
+                return r
+        return None
+
+    async def get_meeting_captions_text(self, meeting_id: str) -> Optional[str]:
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return None
+        return meeting.get("captions_text")
     
     async def delete_meeting(self, meeting_id: str) -> bool:
         """Delete a meeting."""
@@ -258,3 +406,26 @@ class MeetingService:
             "createdAt": meeting["created_at"].isoformat() if meeting.get("created_at") else None,
             "created_at": meeting["created_at"].isoformat() if meeting.get("created_at") else None
         }
+
+    '''get all participants in a meeting '''
+    async def get_meeting_participants(self, meeting_id: str) -> List[dict]:
+        """Get all participants in a meeting."""
+        meeting = await self.collection.find_one({"meeting_id": meeting_id})
+        if not meeting:
+            return []
+        
+        participants = meeting.get("participants", [])
+        participant_details = []
+        
+        for participant in participants:
+            user = await self.users_collection.find_one({"_id": ObjectId(participant["user"])})
+            participant_details.append({
+                "user_id": participant["user"],
+                "name": user["name"] if user else "Unknown",
+                "email": user["email"] if user else "Unknown",
+                "joined_at": participant.get("joined_at").isoformat() if participant.get("joined_at") else None,
+                "left_at": participant.get("left_at").isoformat() if participant.get("left_at") else None,
+                "is_active": participant.get("is_active", False)
+            })
+        
+        return participant_details
