@@ -443,25 +443,17 @@ const MeetingRoom = () => {
           localVideoRef.current.srcObject = localStream;
         }
 
-        const sock = io(SOCKET_SERVER_URL, { transports: ["websocket"], path: '/socket.io' });
+        const sock = io(SOCKET_SERVER_URL, { transports: ["websocket"] });
         setSocket(sock);
         sock.on("connect", () => {
-          console.log('[WWC] socket connected', sock.id, 'to', SOCKET_SERVER_URL);
           setSelfSocketId(sock.id);
-
-          // Emit join only after connected. Use user id when available, otherwise fallback to socket id.
-          const resolvedUserId = user?._id || user?.id || sock.id;
-          sock.emit("join-meeting", {
-            meetingId,
-            userId: resolvedUserId,
-            userName: user?.name || "User",
-          });
-          console.log('[WWC] emitted join-meeting for', { meetingId, userId: resolvedUserId, userName: user?.name });
         });
 
-        sock.on('connect_error', (err) => console.warn('[WWC] socket connect_error', err));
-        sock.on('connect_failed', (err) => console.warn('[WWC] socket connect_failed', err));
-        sock.on('reconnect', (n) => console.log('[WWC] socket reconnect', n));
+        sock.emit("join-meeting", {
+          meetingId,
+          userId: user?._id,
+          userName: user?.name || "User",
+        });
         (async () => {
           try {
             const res = await meetingService.joinMeeting(meetingId);
@@ -478,20 +470,17 @@ const MeetingRoom = () => {
         });
 
         sock.on("existing-participants", (existing) => {
-          console.log('[WWC] existing-participants received:', existing, 'localSockId:', sock.id);
           const uniq = Array.from(
             new Map(existing.map((p) => [p.socketId, p])).values()
           ).filter((p) => p.socketId !== sock.id);
           setParticipants(uniq);
 
           uniq.forEach((p) => {
-            // As initiator for existing participants, create PC and start offer immediately
             createPeerConnection(p.socketId, localStream, sock, true);
           });
         });
 
         sock.on("user-joined", (data) => {
-          console.log('[WWC] user-joined event:', data, 'localSockId:', sock.id);
           if (data.socketId === sock.id) return;
 
           setParticipants((prev) => {
@@ -502,51 +491,43 @@ const MeetingRoom = () => {
             return [...prev, data];
           });
 
-          // For newcomers, we are the initiator=false; create PC and wait for offer
           createPeerConnection(data.socketId, localStream, sock, false);
         });
 
-        // WebRTC Offer
-        sock.on("webrtc-offer", async ({ offer, senderSocketId }) => {
-          console.log('[WWC] webrtc-offer from', senderSocketId);
-          if (!peerConnections.current[senderSocketId]) {
-            createPeerConnection(senderSocketId, localStream, sock, false);
+        // Offer
+        sock.on("offer", async ({ offer, fromSocketId }) => {
+          if (!peerConnections.current[fromSocketId]) {
+            createPeerConnection(fromSocketId, localStream, sock, false);
           }
-          await peerConnections.current[senderSocketId].setRemoteDescription(
+          await peerConnections.current[fromSocketId].setRemoteDescription(
             new RTCSessionDescription(offer)
           );
           const answer = await peerConnections.current[
-            senderSocketId
+            fromSocketId
           ].createAnswer({
             voiceActivityDetection: false,
           });
-          await peerConnections.current[senderSocketId].setLocalDescription(
+          await peerConnections.current[fromSocketId].setLocalDescription(
             answer
           );
-          sock.emit("webrtc-answer", { answer, targetSocketId: senderSocketId });
+          sock.emit("answer", { answer, targetSocketId: fromSocketId });
         });
 
-        sock.on("webrtc-answer", async ({ answer, senderSocketId }) => {
-          console.log('[WWC] webrtc-answer from', senderSocketId);
-          if (peerConnections.current[senderSocketId]) {
-            await peerConnections.current[senderSocketId].setRemoteDescription(
+        sock.on("answer", async ({ answer, fromSocketId }) => {
+          if (peerConnections.current[fromSocketId]) {
+            await peerConnections.current[fromSocketId].setRemoteDescription(
               new RTCSessionDescription(answer)
             );
           }
         });
 
-        sock.on("webrtc-ice-candidate", async ({ candidate, senderSocketId }) => {
-          // ICE candidate from remote
-          if (peerConnections.current[senderSocketId]) {
+        sock.on("ice-candidate", async ({ candidate, fromSocketId }) => {
+          if (peerConnections.current[fromSocketId]) {
             try {
-              await peerConnections.current[senderSocketId].addIceCandidate(
+              await peerConnections.current[fromSocketId].addIceCandidate(
                 new RTCIceCandidate(candidate)
               );
-            } catch (e) {
-              console.warn('[WWC] Failed to add ICE candidate', e);
-            }
-          } else {
-            console.warn('[WWC] Received ICE for unknown peer', senderSocketId);
+            } catch (e) {}
           }
         });
 
@@ -853,53 +834,16 @@ const MeetingRoom = () => {
     });
 
     pc.ontrack = (event) => {
-      // Some browsers may not populate event.streams; build/merge a MediaStream from tracks.
-      const incomingStream = (event.streams && event.streams[0]) || null;
-
-      setRemoteStreams((prev) => {
-        const copy = { ...prev };
-
-        if (incomingStream) {
-          // Replace or set the full stream if provided by the event
-          copy[socketId] = incomingStream;
-        } else {
-          // event.streams not provided: create or append to an existing MediaStream
-          let ms = copy[socketId];
-          if (!ms) {
-            ms = new MediaStream();
-          }
-          try {
-            if (event.track) ms.addTrack(event.track);
-          } catch (e) {
-            console.warn('[WWC] Failed to add incoming track to MediaStream', e);
-          }
-          copy[socketId] = ms;
-        }
-
-        return copy;
-      });
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log('[WWC] pc connectionState for', socketId, pc.connectionState);
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
-        try { pc.close(); } catch (e) {}
-        delete peerConnections.current[socketId];
-        setRemoteStreams((prev) => {
-          const copy = { ...prev };
-          delete copy[socketId];
-          return copy;
-        });
+      const inboundStream =
+        event.streams && event.streams[0] ? event.streams[0] : null;
+      if (inboundStream) {
+        setRemoteStreams((prev) => ({ ...prev, [socketId]: inboundStream }));
       }
-    };
-
-    pc.onsignalingstatechange = () => {
-      console.log('[WWC] pc signalingState for', socketId, pc.signalingState);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        sock.emit("webrtc-ice-candidate", {
+        sock.emit("ice-candidate", {
           candidate: event.candidate,
           targetSocketId: socketId,
         });
@@ -915,26 +859,11 @@ const MeetingRoom = () => {
             voiceActivityDetection: false,
           });
           await pc.setLocalDescription(offer);
-          sock.emit("webrtc-offer", { offer, targetSocketId: socketId });
+          sock.emit("offer", { offer, targetSocketId: socketId });
         } catch (e) {
           console.error('[WWC] Error creating offer:', e);
         }
       };
-      // Some browsers/implementations may not fire negotiationneeded reliably.
-      // Also proactively create an offer now to start the handshake.
-      (async () => {
-        try {
-          const offer = await pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true,
-            voiceActivityDetection: false,
-          });
-          await pc.setLocalDescription(offer);
-          sock.emit("webrtc-offer", { offer, targetSocketId: socketId });
-        } catch (e) {
-          console.warn('[WWC] Proactive offer failed:', e);
-        }
-      })();
     }
   };
 

@@ -64,25 +64,72 @@ async def join_meeting(sid, data):
     logger.info(f"User {user_name} ({user_id}) joining meeting: {meeting_id}")
 
     await sio.enter_room(sid, meeting_id)
- 
-    socket_to_meeting[sid] = meeting_id
-    socket_to_user[sid] = {"id": user_id, "name": user_name}
-    
-    if meeting_id not in active_meetings:
-        active_meetings[meeting_id] = set()
-    active_meetings[meeting_id].add(sid)
-    
+    # Check for an existing connection for this user in the same meeting.
+    # If found, treat this as a reconnection (e.g. browser refresh) and
+    # replace the old socket id mapping instead of creating a duplicate
+    # participant entry.
+    replaced_old_sid = None
+    if meeting_id in active_meetings and user_id:
+        for socket_id in list(active_meetings.get(meeting_id, set())):
+            if socket_id in socket_to_user and socket_to_user[socket_id].get("id") == user_id:
+                replaced_old_sid = socket_id
+                break
 
-    await sio.emit(
-        "user-joined",
-        {
-            "userId": user_id,
-            "userName": user_name,
-            "socketId": sid
-        },
-        room=meeting_id,
-        skip_sid=sid
-    )
+    # If reconnection, remove old mappings for the previous socket id
+    if replaced_old_sid:
+        logger.info(f"User {user_name} ({user_id}) reconnecting: replacing socket {replaced_old_sid} -> {sid}")
+        # remove old socket from room and internal maps if still present
+        try:
+            await sio.leave_room(replaced_old_sid, meeting_id)
+        except Exception:
+            # old socket may already be disconnected; ignore
+            pass
+
+        active_meetings[meeting_id].discard(replaced_old_sid)
+        if replaced_old_sid in socket_to_meeting:
+            del socket_to_meeting[replaced_old_sid]
+        if replaced_old_sid in socket_to_user:
+            del socket_to_user[replaced_old_sid]
+
+        # Add the new socket id mappings
+        socket_to_meeting[sid] = meeting_id
+        socket_to_user[sid] = {"id": user_id, "name": user_name}
+        if meeting_id not in active_meetings:
+            active_meetings[meeting_id] = set()
+        active_meetings[meeting_id].add(sid)
+
+        # Notify other participants that this user reconnected and provide
+        # the new socket id so peers can update their peer-connections.
+        await sio.emit(
+            "user-reconnected",
+            {
+                "userId": user_id,
+                "userName": user_name,
+                "oldSocketId": replaced_old_sid,
+                "newSocketId": sid,
+            },
+            room=meeting_id,
+            skip_sid=sid,
+        )
+    else:
+        # Fresh join (no existing participant with same user id)
+        socket_to_meeting[sid] = meeting_id
+        socket_to_user[sid] = {"id": user_id, "name": user_name}
+        
+        if meeting_id not in active_meetings:
+            active_meetings[meeting_id] = set()
+        active_meetings[meeting_id].add(sid)
+
+        await sio.emit(
+            "user-joined",
+            {
+                "userId": user_id,
+                "userName": user_name,
+                "socketId": sid
+            },
+            room=meeting_id,
+            skip_sid=sid
+        )
     
  
     await sio.emit(
