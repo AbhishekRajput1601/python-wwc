@@ -344,6 +344,7 @@ async def audio_data(sid, data):
     audio_data = data.get("audioData")
     language = data.get("language", "en")
     translate = data.get("translate", False)
+    mime_type = data.get("mimeType")
     
     if not meeting_id or not audio_data:
         return
@@ -375,11 +376,18 @@ async def audio_data(sid, data):
 
     logger.info(f"Received audio data from {speaker_name} in meeting {meeting_id}")
 
-    # Transcribe using external whisper HTTP service (async)
+    # Transcribe using local faster_whisper model (no external service needed)
     try:
-        result = await transcribe_audio(audio_bytes, language=language, translate=translate)
+        db = get_database()
+        caption_service = CaptionService(db)
+        result = await caption_service.transcribe_audio(audio_bytes, language=language, translate=translate, mime_type=mime_type)
     except Exception as e:
         logger.exception("Transcription failed: %s", e)
+        # notify clients in meeting that transcription failed
+        try:
+            await sio.emit('caption-error', {"meetingId": meeting_id, "message": str(e)}, room=meeting_id)
+        except Exception:
+            logger.exception('Failed to emit caption-error')
         return
 
     captions = result.get("captions") or []
@@ -565,6 +573,16 @@ async def end_meeting(sid, data):
             },
             room=meeting_id
         )
+
+        # mark meeting ended in DB and possibly generate captions file
+        try:
+            db = get_database()
+            from app.services.meeting_service import MeetingService
+            meeting_service = MeetingService(db)
+            # this will update status and also attempt to gather/upload captions
+            await meeting_service.end_meeting(meeting_id)
+        except Exception:
+            logger.exception("Failed to update meeting end state for %s", meeting_id)
 
         if meeting_id in active_meetings:
             del active_meetings[meeting_id]

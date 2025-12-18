@@ -284,6 +284,39 @@ async def get_recording(
     return {"success": True, "recording": rec}
 
 
+@router.get("/{meeting_id}/captions", response_model=dict)
+async def get_meeting_captions(
+    meeting_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get captions for a meeting as JSON."""
+    meeting_service = MeetingService(db)
+    meeting = await meeting_service.get_meeting_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    is_host = meeting.get("host") == user_id
+    participants = meeting.get("participants", [])
+    is_participant = any((p.get("user") == user_id) for p in participants)
+
+    if not (is_host or is_participant):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view captions")
+
+    captions_text = meeting.get("captions_text")
+    captions_file_path = meeting.get("captions_file_path")
+    
+    if not captions_text and not captions_file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No captions available for this meeting")
+
+    return {
+        "success": True,
+        "captions_text": captions_text or "",
+        "captions_file_path": captions_file_path,
+        "meeting_id": meeting_id
+    }
+
+
 @router.get("/{meeting_id}/captions/text", response_class=PlainTextResponse)
 async def get_meeting_captions_text(
     meeting_id: str,

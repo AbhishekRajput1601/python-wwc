@@ -27,6 +27,8 @@ class MeetingService:
         
         meeting_dict = {
             "meeting_id": meeting_id,
+            # Maintain backward compatibility with existing unique index on camelCase
+            "meetingId": meeting_id,
             "title": meeting_data.title,
             "description": meeting_data.description,
             "host": host_id,
@@ -193,7 +195,49 @@ class MeetingService:
         )
         
         if result:
-            return self._serialize_meeting(result)
+            # After ending the meeting, gather captions (if any), generate a captions file,
+            # upload it and attach its URL to the meeting document so it appears in user profiles.
+            try:
+                from app.services.caption_service import CaptionService
+                db = self.db
+                caption_service = CaptionService(db)
+                caps = await caption_service.get_captions(meeting_id)
+                if caps and caps.get("captions"):
+                    formatted = caption_service.format_captions(caps.get("captions", []), format="txt")
+                    # persist to temp file and upload via cloudinary helper
+                    tmp_fd = None
+                    tmp_path = None
+                    try:
+                        import tempfile, os
+                        fd, tmp_path = tempfile.mkstemp(suffix=".txt", prefix="captions_")
+                        tmp_fd = fd
+                        with os.fdopen(fd, "w", encoding="utf-8") as f:
+                            f.write(formatted)
+
+                        # upload to cloudinary (use 'raw' resource type for text files)
+                        from app.core.cloudinary import upload_file as cloudinary_upload_file
+                        extra = {"resource_type": "raw", "folder": "captions", "use_filename": True, "unique_filename": True}
+                        try:
+                            upload_res = await asyncio.to_thread(cloudinary_upload_file, tmp_path, None, None, extra)
+                            url = upload_res.get("secure_url") or upload_res.get("url")
+                            if url:
+                                await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"captions_text": formatted, "captions_file_path": url}})
+                        except Exception:
+                            # if cloudinary upload failed, just store captions_text in meeting
+                            await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"captions_text": formatted}})
+                    finally:
+                        try:
+                            if tmp_path and os.path.exists(tmp_path):
+                                os.remove(tmp_path)
+                        except Exception:
+                            pass
+            except Exception:
+                # non-fatal: ensure meeting still returned
+                pass
+
+            # Fetch latest meeting document (with any captions fields updated) and return
+            updated = await self.collection.find_one({"meeting_id": meeting_id})
+            return self._serialize_meeting(updated)
         return None
 
     async def add_user_in_meeting(self, meeting_id: str, user_id: str) -> Optional[dict]:

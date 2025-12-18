@@ -116,7 +116,19 @@ const MeetingRoom = () => {
     setIsVideoOn((prev) => !prev);
   };
   const toggleCaptions = () => {
-    setShowCaptions((prev) => !prev);
+    const next = !showCaptions;
+    setShowCaptions(next);
+    try {
+      if (socket) {
+        if (next) {
+          socket.emit('start_captions', { meetingId, language: selectedLanguage || 'en' });
+        } else {
+          socket.emit('stop_captions', { meetingId });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to toggle captions on server', e);
+    }
   };
 
   // Continuous background audio streaming to server (always active when joined)
@@ -133,7 +145,7 @@ const MeetingRoom = () => {
       // convert Float32Array to 16-bit PCM WAV
       const buffer = encodeWAV(float32Buffer, sampleRate);
       try {
-        socket.emit('audio-data', {
+          socket.emit('audio_data', {
           meetingId,
           audioData: buffer.buffer,
           mimeType: 'audio/wav',
@@ -229,7 +241,7 @@ const MeetingRoom = () => {
           try {
             const arrayBuffer = await e.data.arrayBuffer();
             const chunkMime = recorder && recorder.mimeType ? recorder.mimeType : (mimeType || 'audio/webm');
-            socket.emit('audio-data', {
+            socket.emit('audio_data', {
               meetingId,
               audioData: arrayBuffer,
               mimeType: chunkMime,
@@ -612,6 +624,43 @@ const MeetingRoom = () => {
       socket.off("user-started-screen-share", onStart);
       socket.off("user-stopped-screen-share", onStop);
       socket.off("meeting-ended", onMeetingEnded);
+    };
+  }, [socket]);
+
+  // Listen for live caption updates and update UI
+  useEffect(() => {
+    if (!socket) return;
+    const onCaptionUpdate = (payload) => {
+      try {
+        if (!payload) return;
+        const text = payload.text || payload.caption || payload.original_text || '';
+        setCurrentCaption(text);
+        if (text) {
+          setTimeout(() => {
+            setCurrentCaption((cur) => (cur === text ? '' : cur));
+          }, 5000);
+        }
+      } catch (e) {
+        console.warn('Failed to handle caption-update', e);
+      }
+    };
+
+    const onCaptionError = (payload) => {
+      try {
+        const msg = payload?.message || 'Transcription unavailable';
+        // show briefly in caption area
+        setCurrentCaption(msg);
+        setTimeout(() => setCurrentCaption(''), 5000);
+      } catch (e) {
+        console.warn('Failed to handle caption-error', e);
+      }
+    };
+
+    socket.on('caption-update', onCaptionUpdate);
+    socket.on('caption-error', onCaptionError);
+    return () => {
+      socket.off('caption-update', onCaptionUpdate);
+      socket.off('caption-error', onCaptionError);
     };
   }, [socket]);
 

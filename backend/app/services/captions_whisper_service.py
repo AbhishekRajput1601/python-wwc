@@ -72,16 +72,24 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
     else:
         raise ValueError('file_or_buffer must be bytes or filepath string')
 
-    # conversion function
+    # detect ffmpeg binary path and prepare conversion function
+    ffmpeg_path = shutil.which('ffmpeg')
+
     async def _try_convert(path):
+        if not ffmpeg_path:
+            raise RuntimeError('ffmpeg binary not found in PATH')
         cmd = [
-            'ffmpeg', '-y', '-i', path,
+            ffmpeg_path, '-y', '-i', path,
             '-ac', '1', '-ar', '16000', '-acodec', 'pcm_s16le', output_path
         ]
         await _run_subprocess(cmd)
 
     # try conversion, on failure try alternative extensions (if buffer)
     try:
+        # If ffmpeg is unavailable and input already a WAV, skip conversion and return input path
+        if not shutil.which('ffmpeg') and os.path.splitext(input_path)[1].lower() == '.wav':
+            return input_path
+
         await _try_convert(input_path)
         try:
             os.remove(input_path)
