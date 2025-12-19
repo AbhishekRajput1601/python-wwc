@@ -133,7 +133,7 @@ const Dashboard = () => {
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-neutral-900 font-display mb-2 px-3">
-              Welcome back, <span className="text-wwc-600">{user?.name}</span> !
+              Welcome back, <span className="text-wwc-600">{user?.name}</span>!
             </h1>
             <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4">
               Ready to host world-class meetings? Start a new session or join an
