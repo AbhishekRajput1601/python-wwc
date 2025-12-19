@@ -87,9 +87,7 @@ const AdminDashboard = () => {
       ];
       const rows = meetings.map((m) => {
         const participants = (m.participants || [])
-          .map(
-            (p) => `${p.user?.name || p.user || ""} <${p.user?.email || ""}>`
-          )
+          .map((p) => `${p.name || p.id || p.user || ""} <${p.email || ""}>`)
           .join("; ");
         return [
           m.meetingId || "",
@@ -115,11 +113,9 @@ const AdminDashboard = () => {
       a.remove();
       URL.revokeObjectURL(url);
     } else {
-      const lines = meetings.map((m, idx) => {
+        const lines = meetings.map((m, idx) => {
         const participants = (m.participants || [])
-          .map(
-            (p) => `${p.user?.name || p.user || ""} <${p.user?.email || ""}>`
-          )
+          .map((p) => `${p.name || p.id || p.user || ""} <${p.email || ""}>`)
           .join("; ");
         return `${idx + 1}. ${m.title || ""} | ${m.meetingId || ""} | Host: ${
           m.host?.name || ""
@@ -183,14 +179,12 @@ const AdminDashboard = () => {
     const activeMeetings = meetings.filter((m) => m.status === "active").length;
     const endedMeetings = meetings.filter((m) => m.status === "ended").length;
 
-    const totalParticipants = meetings.reduce(
-      (sum, m) => sum + (m.participants?.length || 0),
-      0
-    );
-    const activeParticipants = meetings.reduce(
-      (sum, m) => sum + (m.participants?.filter((p) => p.isActive).length || 0),
-      0
-    );
+    const totalParticipants = meetings.reduce((sum, m) => sum + (m.participants?.length || 0), 0);
+    const activeParticipants = meetings.reduce((sum, m) => {
+      const pats = m.participants || [];
+      const activeCount = pats.filter((p) => Boolean(p.isActive || p.is_active)).length;
+      return sum + activeCount;
+    }, 0);
 
     const lastDays = [];
     const today = new Date();
@@ -244,7 +238,7 @@ const AdminDashboard = () => {
       try {
         const usersRes = await api.get("/admin/users");
         setUsers(usersRes.data.users || []);
-        const meetingsRes = await api.get("/admin/meetings-users");
+        const meetingsRes = await api.get("/admin/meetings");
         setMeetings(meetingsRes.data.data || []);
 
         console.log(usersRes);
@@ -932,7 +926,7 @@ const AdminDashboard = () => {
             </thead>
             <tbody>
               {meetings.map((m) => (
-                <tr key={m._id} className="border-b">
+                <tr key={m.meetingId || m._id} className="border-b">
                   <td className="py-2 px-4">
                     {m.meetingId?.split("-")[0] || m.meetingId}
                   </td>
@@ -961,7 +955,7 @@ const AdminDashboard = () => {
                     <div className="inline-block">
                       <button
                         onClick={(e) =>
-                          toggleParticipants(e, m._id, m.participants)
+                          toggleParticipants(e, m.meetingId || m._id, m.participants)
                         }
                         className="flex items-center space-x-2 px-3 py-1 bg-neutral-100 hover:bg-neutral-200 rounded-md text-sm border"
                       >
@@ -981,7 +975,7 @@ const AdminDashboard = () => {
                       </button>
                     </div>
 
-                    {openParticipantsId === m._id &&
+                    {openParticipantsId === (m.meetingId || m._id) &&
                       dropdownPos &&
                       createPortal(
                         <div
@@ -1012,10 +1006,10 @@ const AdminDashboard = () => {
                                   >
                                     <div className="flex-1">
                                       <div className="text-sm font-medium text-neutral-900">
-                                        {p.user?.name || p.user}
+                                        {p.name || p.id || p.user}
                                       </div>
                                       <div className="text-xs text-neutral-500">
-                                        {p.user?.email || ""}
+                                        {p.email || ""}
                                       </div>
                                     </div>
                                   </li>
@@ -1028,7 +1022,7 @@ const AdminDashboard = () => {
                       )}
                   </td>
                   <td className="py-2 px-4">
-                    {new Date(m.createdAt).toLocaleString()}
+                    {m.createdAt ? new Date(m.createdAt).toLocaleString() : "-"}
                   </td>
                 </tr>
               ))}

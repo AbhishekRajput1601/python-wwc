@@ -1,4 +1,3 @@
-# Celery configuration for background tasks
 from celery import Celery
 from app.core.config import settings
 
@@ -16,8 +15,6 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# Import tasks
-# from app.workers.tasks import process_recording, transcribe_audio
 
 @celery_app.task
 def example_task():

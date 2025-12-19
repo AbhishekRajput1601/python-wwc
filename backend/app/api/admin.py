@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Dict, Any
+from bson import ObjectId
 
 from app.db.session import get_db
 from app.services.auth_service import AuthService
@@ -49,10 +50,22 @@ async def get_all_users(
     await _ensure_admin(current_user_id, db)
     auth_service = AuthService(db)
     users = await auth_service.get_users(skip=0, limit=1000)
-    output = [
-        {"id": str(u["_id"]), "name": u["name"], "email": u["email"], "avatar": u.get("avatar", "")}
-        for u in users
-    ]
+    output = []
+    for u in users:
+        created = u.get("created_at") or u.get("createdAt")
+        if hasattr(created, "isoformat"):
+            created_val = created.isoformat()
+        else:
+            created_val = created
+
+        output.append({
+            "id": str(u["_id"]),
+            "name": u.get("name"),
+            "email": u.get("email"),
+            "avatar": u.get("avatar", ""),
+            "role": u.get("role", "user"),
+            "createdAt": created_val,
+        })
     return {"success": True, "users": output}
 
 
@@ -89,12 +102,28 @@ async def get_all_meetings_with_users(
 
     out = []
     for m in meetings:
+        # Host lookup: support ObjectId or string id
         host = None
         try:
-            if m.get("host"):
-                host_doc = await users_coll.find_one({"_id": m.get("host")})
-                if host_doc:
-                    host = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
+            host_ref = m.get("host")
+            host_doc = None
+            if host_ref:
+                # try direct lookup
+                host_doc = await users_coll.find_one({"_id": host_ref})
+                if not host_doc:
+                    try:
+                        host_doc = await users_coll.find_one({"_id": ObjectId(host_ref)})
+                    except Exception:
+                        host_doc = None
+
+            if host_doc:
+                host = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
+            else:
+                # If host stored as dict with details, preserve useful keys
+                if isinstance(host_ref, dict):
+                    host = {"id": str(host_ref.get("_id") or host_ref.get("id") or ""), "name": host_ref.get("name"), "email": host_ref.get("email")}
+                else:
+                    host = host_ref
         except Exception:
             host = m.get("host")
 
@@ -103,12 +132,29 @@ async def get_all_meetings_with_users(
             pu = p.get("user")
             try:
                 user_doc = await users_coll.find_one({"_id": pu})
+                if not user_doc:
+                    try:
+                        user_doc = await users_coll.find_one({"_id": ObjectId(pu)})
+                    except Exception:
+                        user_doc = None
+
                 if user_doc:
-                    participants.append({"id": str(user_doc["_id"]), "name": user_doc.get("name"), "email": user_doc.get("email"), "is_active": p.get("is_active", False)})
+                    participants.append({
+                        "id": str(user_doc["_id"]),
+                        "name": user_doc.get("name"),
+                        "email": user_doc.get("email"),
+                        "is_active": p.get("is_active", p.get("isActive", False)),
+                    })
                 else:
-                    participants.append({"id": pu})
+                    participants.append({"id": pu, "is_active": p.get("is_active", p.get("isActive", False))})
             except Exception:
-                participants.append({"id": pu})
+                participants.append({"id": pu, "is_active": p.get("is_active", p.get("isActive", False))})
+
+        created = m.get("created_at") or m.get("createdAt")
+        if hasattr(created, "isoformat"):
+            created_val = created.isoformat()
+        else:
+            created_val = created
 
         out.append({
             "meetingId": m.get("meeting_id") or m.get("meetingId"),
@@ -116,7 +162,8 @@ async def get_all_meetings_with_users(
             "description": m.get("description"),
             "host": host,
             "participants": participants,
-            "status": m.get("status")
+            "status": m.get("status"),
+            "createdAt": created_val,
         })
 
     return {"success": True, "data": out}
