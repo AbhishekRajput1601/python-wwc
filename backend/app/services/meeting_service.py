@@ -66,7 +66,34 @@ class MeetingService:
         """Get meeting by meeting_id."""
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         if meeting:
-            return self._serialize_meeting(meeting)
+            serialized = self._serialize_meeting(meeting)
+            # enrich host info
+            try:
+                host_id = meeting.get("host")
+                host_doc = None
+                if host_id:
+                    try:
+                        host_doc = await self.users_collection.find_one({"_id": ObjectId(host_id)})
+                    except Exception:
+                        host_doc = await self.users_collection.find_one({"_id": host_id})
+
+                if host_doc:
+                    serialized["host"] = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
+                else:
+                    # preserve any host_info if present
+                    if meeting.get("host_info"):
+                        serialized["host"] = meeting.get("host_info")
+            except Exception:
+                pass
+
+            # enrich participants
+            try:
+                participant_details = await self.get_meeting_participants(meeting_id)
+                serialized["participants"] = participant_details
+            except Exception:
+                pass
+
+            return serialized
         return None
     
     async def get_user_meetings(
@@ -89,8 +116,35 @@ class MeetingService:
         
         cursor = self.collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
         meetings = await cursor.to_list(length=limit)
-        
-        return [self._serialize_meeting(m) for m in meetings]
+
+        serialized = [self._serialize_meeting(m) for m in meetings]
+
+        # enrich host and participants for each meeting
+        for idx, m in enumerate(meetings):
+            try:
+                host_id = m.get("host")
+                host_doc = None
+                if host_id:
+                    try:
+                        host_doc = await self.users_collection.find_one({"_id": ObjectId(host_id)})
+                    except Exception:
+                        host_doc = await self.users_collection.find_one({"_id": host_id})
+
+                if host_doc:
+                    serialized[idx]["host"] = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
+                else:
+                    if m.get("host_info"):
+                        serialized[idx]["host"] = m.get("host_info")
+            except Exception:
+                pass
+
+            try:
+                participant_details = await self.get_meeting_participants(m.get("meeting_id"))
+                serialized[idx]["participants"] = participant_details
+            except Exception:
+                pass
+
+        return serialized
     
     async def join_meeting(self, meeting_id: str, user_id: str) -> Optional[dict]:
         """Join a meeting."""
@@ -427,6 +481,20 @@ class MeetingService:
     
     def _serialize_meeting(self, meeting: dict) -> dict:
         """Serialize meeting for response."""
+        def _fmt(dt):
+            if not dt:
+                return None
+            # if naive datetime assume UTC and append 'Z' to make timezone explicit
+            try:
+                if dt.tzinfo is None:
+                    return dt.isoformat() + "Z"
+                return dt.isoformat()
+            except Exception:
+                try:
+                    return dt.isoformat()
+                except Exception:
+                    return None
+
         return {
             "id": str(meeting["_id"]),
             "meetingId": meeting["meeting_id"],  
@@ -438,17 +506,17 @@ class MeetingService:
             "status": meeting["status"],
             "settings": meeting.get("settings", {}),
             "recordings": meeting.get("recordings", []),
-            "startTime": meeting.get("start_time").isoformat() if meeting.get("start_time") else None,
-            "start_time": meeting.get("start_time").isoformat() if meeting.get("start_time") else None,
-            "endTime": meeting.get("end_time").isoformat() if meeting.get("end_time") else None,
-            "end_time": meeting.get("end_time").isoformat() if meeting.get("end_time") else None,
+            "startTime": _fmt(meeting.get("start_time")),
+            "start_time": _fmt(meeting.get("start_time")),
+            "endTime": _fmt(meeting.get("end_time")),
+            "end_time": _fmt(meeting.get("end_time")),
             "captionsText": meeting.get("captions_text"),
             "captions_text": meeting.get("captions_text"),
             "captionsFilePath": meeting.get("captions_file_path"),
             "captions_file_path": meeting.get("captions_file_path"),
             "messages": meeting.get("messages", []),
-            "createdAt": meeting["created_at"].isoformat() if meeting.get("created_at") else None,
-            "created_at": meeting["created_at"].isoformat() if meeting.get("created_at") else None
+            "createdAt": _fmt(meeting.get("created_at")),
+            "created_at": _fmt(meeting.get("created_at"))
         }
 
     '''get all participants in a meeting '''

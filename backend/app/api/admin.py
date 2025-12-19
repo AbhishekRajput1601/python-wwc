@@ -152,7 +152,13 @@ async def get_all_meetings_with_users(
 
         created = m.get("created_at") or m.get("createdAt")
         if hasattr(created, "isoformat"):
-            created_val = created.isoformat()
+            try:
+                if getattr(created, "tzinfo", None) is None:
+                    created_val = created.isoformat() + "Z"
+                else:
+                    created_val = created.isoformat()
+            except Exception:
+                created_val = created.isoformat()
         else:
             created_val = created
 

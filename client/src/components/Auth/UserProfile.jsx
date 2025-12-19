@@ -99,17 +99,17 @@ const UserProfile = () => {
   const stats = useMemo(() => {
     const totalMeetings = meetings.length;
     const userId = user?._id || user?.id || ctxUser?._id || ctxUser?.id;
-    const hostedMeetings = meetings.filter(
-      (m) =>
-        m.host &&
-        (m.host._id || m.host).toString() === (userId && userId.toString())
-    ).length;
+    const hostedMeetings = meetings.filter((m) => {
+      if (!m.host) return false;
+      const hostVal = typeof m.host === "string" ? m.host : m.host.id || m.host._id || m.host;
+      return hostVal && hostVal.toString() === (userId && userId.toString());
+    }).length;
+
     const joinedMeetings = meetings.filter((m) =>
-      (m.participants || []).some(
-        (p) =>
-          p.user &&
-          (p.user._id || p.user).toString() === (userId && userId.toString())
-      )
+      (m.participants || []).some((p) => {
+        const pid = p.user_id || p.user || p.id || p._id;
+        return pid && pid.toString() === (userId && userId.toString());
+      })
     ).length;
 
     const lastDays = [];
@@ -409,7 +409,7 @@ const UserProfile = () => {
               </thead>
               <tbody>
                 {meetings.map((m) => (
-                  <tr key={m._id} className="border-b">
+                  <tr key={m.meetingId || m.id || m._id} className="border-b">
                     <td className="py-2 px-2 sm:px-3 md:px-4 text-xs sm:text-sm">{m.title}</td>
                     <td className="py-2 px-2 sm:px-3 md:px-4">
                       {(m.recordings && m.recordings.length > 0) ||
@@ -449,7 +449,7 @@ const UserProfile = () => {
                       <div className="inline-block">
                         <button
                           onClick={(e) =>
-                            toggleParticipants(e, m._id, m.participants)
+                            toggleParticipants(e, m.meetingId || m.id || m._id, m.participants)
                           }
                           className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1 bg-neutral-100 hover:bg-neutral-200 rounded-md text-xs sm:text-sm border whitespace-nowrap"
                         >
@@ -469,7 +469,7 @@ const UserProfile = () => {
                         </button>
                       </div>
 
-                      {openParticipantsId === m._id &&
+                      {openParticipantsId === (m.meetingId || m.id || m._id) &&
                         dropdownPos &&
                         createPortal(
                           <div
@@ -500,10 +500,10 @@ const UserProfile = () => {
                                     >
                                       <div className="flex-1">
                                         <div className="text-sm font-medium text-neutral-900">
-                                          {p.user?.name || p.user}
+                                          {p.name || p.user_id || p.id || p.user}
                                         </div>
                                         <div className="text-xs text-neutral-500">
-                                          {p.user?.email || ""}
+                                          {p.email || p.user_email || ""}
                                         </div>
                                       </div>
                                     </li>
@@ -516,7 +516,7 @@ const UserProfile = () => {
                         )}
                     </td>
                     <td className="py-2 px-2 sm:px-3 md:px-4 text-xs sm:text-sm whitespace-nowrap">
-                      {new Date(m.createdAt).toLocaleString()}
+                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : "-"}
                     </td>
                   </tr>
                 ))}

@@ -87,7 +87,7 @@ const AdminDashboard = () => {
       ];
       const rows = meetings.map((m) => {
         const participants = (m.participants || [])
-          .map((p) => `${p.name || p.id || p.user || ""} <${p.email || ""}>`)
+          .map((p) => `${p.name || p.user_id || p.id || p.user || ""} <${p.email || p.user_email || ""}>`)
           .join("; ");
         return [
           m.meetingId || "",
@@ -115,7 +115,7 @@ const AdminDashboard = () => {
     } else {
         const lines = meetings.map((m, idx) => {
         const participants = (m.participants || [])
-          .map((p) => `${p.name || p.id || p.user || ""} <${p.email || ""}>`)
+          .map((p) => `${p.name || p.user_id || p.id || p.user || ""} <${p.email || p.user_email || ""}>`)
           .join("; ");
         return `${idx + 1}. ${m.title || ""} | ${m.meetingId || ""} | Host: ${
           m.host?.name || ""
@@ -1006,10 +1006,10 @@ const AdminDashboard = () => {
                                   >
                                     <div className="flex-1">
                                       <div className="text-sm font-medium text-neutral-900">
-                                        {p.name || p.id || p.user}
+                                        {p.name || p.user_id || p.id || p.user}
                                       </div>
                                       <div className="text-xs text-neutral-500">
-                                        {p.email || ""}
+                                        {p.email || p.user_email || ""}
                                       </div>
                                     </div>
                                   </li>

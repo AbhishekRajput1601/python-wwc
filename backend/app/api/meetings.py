@@ -11,6 +11,16 @@ from fastapi.responses import PlainTextResponse
 router = APIRouter()
 
 
+def _host_id_from_meeting(meeting: dict) -> Optional[str]:
+    """Return host id as string whether meeting['host'] is a dict or a raw id."""
+    if not meeting:
+        return None
+    host = meeting.get("host")
+    if isinstance(host, dict):
+        return host.get("id")
+    return str(host) if host is not None else None
+
+
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_meeting(
     meeting_data: MeetingCreate,
@@ -122,7 +132,8 @@ async def update_meeting(
     meeting_service = MeetingService(db)
     
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
-    if not meeting or meeting["host"] != user_id:
+    host_id = _host_id_from_meeting(meeting)
+    if not meeting or host_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this meeting"
@@ -146,7 +157,8 @@ async def end_meeting(
     meeting_service = MeetingService(db)
 
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
-    if not meeting or meeting["host"] != user_id:
+    host_id = _host_id_from_meeting(meeting)
+    if not meeting or host_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to end this meeting"
@@ -171,7 +183,8 @@ async def delete_meeting(
     meeting_service = MeetingService(db)
 
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
-    if not meeting or meeting["host"] != user_id:
+    host_id = _host_id_from_meeting(meeting)
+    if not meeting or host_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this meeting"
@@ -210,7 +223,8 @@ async def add_user_in_meeting(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
     # Only host or admin can add users
-    is_host = meeting.get("host") == user_id
+    host_id = _host_id_from_meeting(meeting)
+    is_host = host_id == user_id
     if not is_host:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add users to this meeting")
 
@@ -236,8 +250,8 @@ async def upload_recording(
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
-
-    is_host = meeting.get("host") == user_id
+    host_id = _host_id_from_meeting(meeting)
+    is_host = host_id == user_id
     participants = meeting.get("participants", [])
     is_participant = any((p.get("user") == user_id) for p in participants)
     # note: admin role check can be done in security dependency if available
@@ -296,7 +310,8 @@ async def get_meeting_captions(
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
-    is_host = meeting.get("host") == user_id
+    host_id = _host_id_from_meeting(meeting)
+    is_host = host_id == user_id
     participants = meeting.get("participants", [])
     is_participant = any((p.get("user") == user_id) for p in participants)
 
