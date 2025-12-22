@@ -188,10 +188,9 @@ export default function MeetingStage({
 
   let hostTile = null;
   if (hostId) {
-    // Try to match hostId to known userId first
+ 
     hostTile = tiles.find((t) => t.userId && String(t.userId) === String(hostId));
 
-    // If no match by userId, try matching by tile key (socketId)
     if (!hostTile) {
       hostTile = tiles.find((t) => String(t.key) === String(hostId));
     }
