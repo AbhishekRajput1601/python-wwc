@@ -277,7 +277,7 @@ class MeetingService:
                             if url:
                                 await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"captions_text": formatted, "captions_file_path": url}})
                         except Exception:
-                            # if cloudinary upload failed, just store captions_text in meeting
+                       
                             await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"captions_text": formatted}})
                     finally:
                         try:
@@ -286,10 +286,9 @@ class MeetingService:
                         except Exception:
                             pass
             except Exception:
-                # non-fatal: ensure meeting still returned
+
                 pass
 
-            # Fetch latest meeting document (with any captions fields updated) and return
             updated = await self.collection.find_one({"meeting_id": meeting_id})
             return self._serialize_meeting(updated)
         return None
@@ -316,10 +315,7 @@ class MeetingService:
         return self._serialize_meeting(updated)
 
     async def upload_recording(self, meeting_id: str, user_id: str, file_bytes: bytes, filename: str) -> Optional[dict]:
-        """Upload a recording to Cloudinary and attach metadata to the meeting.
 
-        Returns the recording metadata dict on success, or None if meeting not found.
-        """
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         if not meeting:
             return None
@@ -361,8 +357,7 @@ class MeetingService:
             upload_result = None
             for attempt in range(1, RETRIES + 1):
                 try:
-                    # Use central upload helper in a thread to avoid blocking the event loop
-                    # Pass options via extra_options param
+
                     upload_result = await asyncio.to_thread(
                         cloudinary_upload_file,
                         tmp_path,
@@ -484,7 +479,6 @@ class MeetingService:
         def _fmt(dt):
             if not dt:
                 return None
-            # if naive datetime assume UTC and append 'Z' to make timezone explicit
             try:
                 if dt.tzinfo is None:
                     return dt.isoformat() + "Z"

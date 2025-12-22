@@ -345,14 +345,29 @@ const MeetingRoom = () => {
         screenStreamRef.current = screenStream;
         setIsScreenSharing(true);
 
-        Object.values(peerConnections.current).forEach((pc) => {
-          const sender = pc
-            .getSenders()
-            .find((s) => s.track && s.track.kind === "video");
-          if (sender) {
-            sender.replaceTrack(screenStream.getVideoTracks()[0]);
+        // Add screen track to all peer connections and renegotiate
+        const screenTrack = screenStream.getVideoTracks()[0];
+        
+        for (const [socketId, pc] of Object.entries(peerConnections.current)) {
+          if (screenTrack) {
+            // Add the screen track to the peer connection with the main stream
+            // This ensures all tracks are associated with the same stream on remote end
+            pc.addTrack(screenTrack, mediaStream);
+            
+            // Trigger renegotiation to send the new track
+            try {
+              const offer = await pc.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true,
+                voiceActivityDetection: false,
+              });
+              await pc.setLocalDescription(offer);
+              socket.emit("offer", { offer, targetSocketId: socketId });
+            } catch (e) {
+              console.error('[WWC] Error renegotiating for screen share:', e);
+            }
           }
-        });
+        }
 
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
@@ -371,26 +386,42 @@ const MeetingRoom = () => {
     }
   };
 
-  const stopScreenShare = () => {
+  const stopScreenShare = async () => {
     setIsScreenSharing(false);
+    
+    // Remove screen track from all peer connections and renegotiate
     if (screenStreamRef.current) {
+      const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+      
+      for (const [socketId, pc] of Object.entries(peerConnections.current)) {
+        const senders = pc.getSenders();
+        const screenSender = senders.find(
+          (s) => s.track && s.track.id === screenTrack?.id
+        );
+        if (screenSender) {
+          pc.removeTrack(screenSender);
+          
+          // Trigger renegotiation after removing track
+          try {
+            const offer = await pc.createOffer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true,
+              voiceActivityDetection: false,
+            });
+            await pc.setLocalDescription(offer);
+            socket.emit("offer", { offer, targetSocketId: socketId });
+          } catch (e) {
+            console.error('[WWC] Error renegotiating after stopping screen share:', e);
+          }
+        }
+      }
+      
       screenStreamRef.current.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
     }
 
-    if (mediaStream) {
-      Object.values(peerConnections.current).forEach((pc) => {
-        const sender = pc
-          .getSenders()
-          .find((s) => s.track && s.track.kind === "video");
-        if (sender) {
-          sender.replaceTrack(mediaStream.getVideoTracks()[0]);
-        }
-      });
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = mediaStream;
-      }
+    if (localVideoRef.current && mediaStream) {
+      localVideoRef.current.srcObject = mediaStream;
     }
 
     if (socket) socket.emit("stop-screen-share");
@@ -634,8 +665,10 @@ const MeetingRoom = () => {
     if (meeting.host) {
       if (typeof meeting.host === "string") hostId = meeting.host;
       else if (meeting.host._id) hostId = String(meeting.host._id);
+      else if (meeting.host.id) hostId = String(meeting.host.id);
       else hostId = String(meeting.host);
     }
+    console.log('[DEBUG] isCreator check:', { userId, hostId, isMatch: hostId && String(hostId) === userId });
     return hostId && String(hostId) === userId;
   })();
   const hostId = (() => {
@@ -688,7 +721,6 @@ const MeetingRoom = () => {
           mediaStream.getVideoTracks().forEach((t) => mixedStream.addTrack(t));
         }
 
-        // Always attach audio tracks from the user's media stream when available
         if (mediaStream.getAudioTracks && mediaStream.getAudioTracks().length > 0) {
           mediaStream.getAudioTracks().forEach((t) => mixedStream.addTrack(t));
         }
@@ -834,11 +866,27 @@ const MeetingRoom = () => {
     });
 
     pc.ontrack = (event) => {
-      const inboundStream =
-        event.streams && event.streams[0] ? event.streams[0] : null;
-      if (inboundStream) {
-        setRemoteStreams((prev) => ({ ...prev, [socketId]: inboundStream }));
-      }
+      console.log('[WWC] Received track:', event.track.kind, event.track.id.substring(0, 8), 'from:', socketId);
+      
+      // Combine all incoming tracks into a single stream
+      setRemoteStreams((prev) => {
+        const existingStream = prev[socketId];
+        
+        if (existingStream) {
+          // Add the new track to existing stream if not already there
+          const trackExists = existingStream.getTracks().some(t => t.id === event.track.id);
+          if (!trackExists) {
+            existingStream.addTrack(event.track);
+            console.log('[WWC] Added track to existing stream. Total tracks:', existingStream.getTracks().length);
+          }
+          return { ...prev }; // Return new object to trigger re-render
+        } else {
+          // Create new stream with this track
+          const newStream = new MediaStream([event.track]);
+          console.log('[WWC] Created new stream for:', socketId);
+          return { ...prev, [socketId]: newStream };
+        }
+      });
     };
 
     pc.onicecandidate = (event) => {

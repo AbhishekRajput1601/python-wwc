@@ -249,7 +249,39 @@ export default function MeetingStage({
   }, [others, stageSize, tilePx]);
 
   if (activeShareId) {
-    const shareStream = isScreenSharing ? screenStreamRef.current || mediaStream : remoteStreams[remoteScreenSharerId];
+    // For screen sharing view, we need to separate camera and screen tracks
+    let screenStream, cameraStream;
+    
+    if (isScreenSharing) {
+      // Local user is sharing
+      screenStream = screenStreamRef.current;
+      cameraStream = mediaStream;
+    } else {
+      // Remote user is sharing - need to split the tracks
+      const remoteStream = remoteStreams[remoteScreenSharerId];
+      if (remoteStream) {
+        const videoTracks = remoteStream.getVideoTracks();
+        // Typically: first track is camera, second is screen (or vice versa)
+        // We can identify screen share track by checking track settings
+        const screenTrack = videoTracks.find(t => {
+          const settings = t.getSettings();
+          // Screen shares typically have different aspect ratios or larger dimensions
+          return settings.width > 1280 || settings.displaySurface === 'monitor';
+        });
+        const cameraTrack = videoTracks.find(t => t !== screenTrack);
+        
+        if (screenTrack) {
+          screenStream = new MediaStream([screenTrack]);
+          if (remoteStream.getAudioTracks().length > 0) {
+            screenStream.addTrack(remoteStream.getAudioTracks()[0]);
+          }
+        }
+        if (cameraTrack) {
+          cameraStream = new MediaStream([cameraTrack]);
+        }
+      }
+    }
+    
     return (
       <div className="w-full h-full flex flex-col sm:flex-row items-center justify-center overflow-hidden px-2 sm:px-4 py-2">
         <div className="w-full h-full max-w-full sm:max-w-[1100px] max-h-full sm:max-h-[85vh] mb-12" style={{ aspectRatio: "16 / 9" }}>
@@ -259,12 +291,12 @@ export default function MeetingStage({
               playsInline
               disablePictureInPicture
               muted={isScreenSharing}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain bg-neutral-900"
               style={{ latency: 0 }}
               ref={(el) => {
                 if (!el) return;
-                el.srcObject = shareStream || null;
-                if (shareStream && !isScreenSharing) {
+                el.srcObject = screenStream || null;
+                if (screenStream && !isScreenSharing) {
                   el.play().catch(e => console.log('[WWC] Screen share play error:', e));
                 }
               }}
@@ -276,13 +308,15 @@ export default function MeetingStage({
                   autoPlay
                   playsInline
                   disablePictureInPicture
-                  muted
+                  muted={isScreenSharing}
                   className="w-full h-full object-cover"
                   style={{ latency: 0 }}
                   ref={(el) => {
                     if (!el) return;
-                    const pipStream = isScreenSharing ? mediaStream : remoteStreams[selfSocketId];
-                    el.srcObject = pipStream || null;
+                    el.srcObject = cameraStream || null;
+                    if (cameraStream && !isScreenSharing) {
+                      el.play().catch(e => console.log('[WWC] Camera PIP play error:', e));
+                    }
                   }}
                 />
               </div>
