@@ -84,7 +84,7 @@ async def login(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Please provide an email and password"
             )
-        
+
         # Check if user is already logged in
         if authorization and authorization.startswith("Bearer "):
             token = authorization.split(" ")[1]
@@ -93,25 +93,20 @@ async def login(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="User already logged in"
                 )
-        
+
         auth_service = AuthService(db)
-        
-        # Check for user
+
+        # Fetch user
         user = await auth_service.get_user_by_email(credentials.email)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
-        
-        # Check if password matches
-        # Debug: ensure we're passing the expected values to verify
-        try:
-            pw_type = type(credentials.password).__name__
-            pw_len = len(credentials.password) if isinstance(credentials.password, str) else None
-        except Exception:
-            pw_type = type(credentials.password).__name__
-            pw_len = None
+
+        # --- Debug logging (safe to remove later) ---
+        pw_type = type(credentials.password).__name__
+        pw_len = len(credentials.password) if isinstance(credentials.password, str) else None
 
         stored = user.get("password")
         stored_type = type(stored).__name__
@@ -119,36 +114,34 @@ async def login(
 
         logger.error(f"LOGIN: credentials.password type={pw_type} len={pw_len}")
         logger.error(f"LOGIN: stored password type={stored_type} len={stored_len}")
+        # -------------------------------------------
 
-        # Assert stored value looks like a bcrypt hash (temporary guard)
-        if not isinstance(stored, str) or not stored.startswith("$2"):
-            logger.error("Stored password does not look like a bcrypt hash")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Server error during login"
-            )
-
-        if not verify_password(credentials.password, user["password"]):
+        # ✅ DO NOT manually validate hash format
+        # ✅ Let passlib handle verification
+        if not verify_password(credentials.password, stored):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
-        
+
         # Generate token
-        token = create_access_token(data={"sub": str(user["_id"])})
-        
+        token = create_access_token(
+            data={"sub": str(user["_id"])}
+        )
+
         logger.info(f"User logged in: {credentials.email}")
-        
+
         return {
             "success": True,
             "token": token,
             "user": {
                 "id": str(user["_id"]),
-                "name": user["name"],
+                "name": user.get("name"),
                 "email": user["email"],
                 "preferences": user.get("preferences", {}),
             }
         }
+
     except HTTPException:
         raise
     except Exception as e:
