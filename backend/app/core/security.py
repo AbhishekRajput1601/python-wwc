@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import logging
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
@@ -10,18 +11,45 @@ from app.db.models import USERS_COLLECTION
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
+logger = logging.getLogger(__name__)
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 
+def normalize_password(password: str) -> str:
+    """Normalize and validate password input before hashing/verifying.
+
+    - Ensures the value is a string
+    - Strips surrounding whitespace
+    - Truncates to 72 characters (bcrypt limit)
+    - Logs length for temporary debugging
+    """
+    if not isinstance(password, str):
+        raise ValueError("Password must be a string")
+
+    # Log original length (temporary) to prove what is being hashed
+    logger.error(f"PASSWORD LENGTH = {len(password)}")
+
+    normalized = password.strip()[:72]
+    logger.error(f"NORMALIZED PASSWORD LENGTH = {len(normalized)}")
+    return normalized
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
-    return pwd_context.verify(plain_password, hashed_password)
+    normalized = normalize_password(plain_password)
+    return pwd_context.verify(normalized, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    return pwd_context.hash(password)
+    """Hash a password.
+
+    Normalizes the password before hashing to ensure we only ever pass
+    the raw password string (max 72 bytes) into bcrypt.
+    """
+    normalized = normalize_password(password)
+    return pwd_context.hash(normalized)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
