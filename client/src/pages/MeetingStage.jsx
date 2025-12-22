@@ -188,12 +188,19 @@ export default function MeetingStage({
 
   let hostTile = null;
   if (hostId) {
+    // Try to match hostId to known userId first
     hostTile = tiles.find((t) => t.userId && String(t.userId) === String(hostId));
 
+    // If no match by userId, try matching by tile key (socketId)
+    if (!hostTile) {
+      hostTile = tiles.find((t) => String(t.key) === String(hostId));
+    }
+
+    // As an additional fallback, check participants list for a matching userId or socketId
     if (!hostTile && Array.isArray(participants) && participants.length) {
-      const hostParticipant = participants.find((p) => p.userId && String(p.userId) === String(hostId));
+      const hostParticipant = participants.find((p) => (p.userId && String(p.userId) === String(hostId)) || (p.socketId && String(p.socketId) === String(hostId)));
       if (hostParticipant && hostParticipant.socketId) {
-        hostTile = tiles.find((t) => t.key === hostParticipant.socketId);
+        hostTile = tiles.find((t) => t.key === hostParticipant.socketId) || hostTile;
       }
     }
   }
@@ -370,7 +377,6 @@ export default function MeetingStage({
       </div>
 
       <div ref={stageRef} className="hidden sm:flex flex-1 items-stretch justify-center bg-transparent h-full relative p-3 md:p-4 overflow-hidden">
-        {/* Connection lines SVG: draws smooth curved paths from each participant to host edge */}
         <svg
           className="absolute inset-0 w-full h-full pointer-events-none"
           style={{ zIndex: 25 }}
