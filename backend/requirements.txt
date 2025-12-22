@@ -12,6 +12,7 @@ faster-whisper>=0.7.0
 httpx>=0.24.0
 filetype>=1.0.7
 passlib[bcrypt]>=1.7.4
+bcrypt<5.0.0
 python-jose[cryptography]>=3.3.0
 celery>=5.2.0
 email-validator>=2.0.0
