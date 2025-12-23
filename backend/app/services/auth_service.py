@@ -31,6 +31,25 @@ class AuthService:
         result = await self.collection.insert_one(user_dict)
         user_dict["_id"] = result.inserted_id
         return user_dict
+
+    async def create_user_with_hashed_password(self, name: str, email: str, password_hashed: str) -> dict:
+        """Create user when password is already hashed (used after OTP verification)."""
+        user_dict = {
+            "name": name,
+            "email": email,
+            "password": password_hashed,
+            "role": "user",
+            "avatar": "",
+            "preferences": {
+                "default_language": "en",
+                "captions_enabled": True
+            },
+            "created_at": datetime.utcnow()
+        }
+
+        result = await self.collection.insert_one(user_dict)
+        user_dict["_id"] = result.inserted_id
+        return user_dict
     
     async def get_user_by_email(self, email: str) -> Optional[dict]:
         """Get user by email."""

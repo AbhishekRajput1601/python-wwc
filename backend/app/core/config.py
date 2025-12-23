@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # File Upload
     UPLOAD_DIR: str = "uploads/captions"
     MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB
+    # Email / SMTP
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int | None = None
+    SMTP_USER: str | None = None
+    SMTP_PASS: str | None = None
+    EMAIL_FROM: str | None = None
     
     class Config:
         env_file = ".env"

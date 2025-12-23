@@ -8,6 +8,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import MeetingRoom from './pages/MeetingRoom'
 import Login from './components/Auth/Login'
 import Signup from './components/Auth/Signup'
+import ForgotPassword from './components/Auth/ForgotPassword'
 import UserProfile from './components/Auth/UserProfile'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
           <Route path="/meeting/:meetingId" element={<MeetingRoom />} />

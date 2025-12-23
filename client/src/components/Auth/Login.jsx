@@ -87,6 +87,8 @@ const Login = () => {
             >
               Create one here
             </Link>
+            <span className="mx-1">|</span>
+            <Link to="/forgot-password" className="font-semibold text-wwc-600 hover:text-wwc-700 transition-colors duration-200">Forgot password?</Link>
           </p>
         </div>
         <div className="bg-white shadow-medium rounded-xl sm:rounded-2xl px-4 sm:px-6 py-4 sm:py-6 mt-3 sm:mt-4">

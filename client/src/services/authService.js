@@ -33,6 +33,62 @@ class AuthService {
     }
   }
 
+  async requestRegistrationOtp(userData) {
+    try {
+      const response = await api.post('/auth/request-registration-otp', userData);
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to request verification code',
+        error: error.response?.data || error.message
+      };
+    }
+  }
+
+  async verifyRegistrationOtp(payload) {
+    try {
+      const response = await api.post('/auth/verify-registration-otp', payload);
+      if (response.data.success && response.data.token) {
+        sessionStorage.setItem('token', response.data.token);
+        api.setAuthToken(response.data.token);
+      }
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to verify code',
+        error: error.response?.data || error.message
+      };
+    }
+  }
+
+  async requestPasswordReset(payload) {
+    try {
+      const response = await api.post('/auth/request-password-reset', payload);
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to request password reset',
+        error: error.response?.data || error.message
+      };
+    }
+  }
+
+  async resetPassword(payload) {
+    try {
+      const response = await api.post('/auth/reset-password', payload);
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to reset password',
+        error: error.response?.data || error.message
+      };
+    }
+  }
+
   async login(credentials) {
     try {
       const response = await api.post('/auth/login', credentials);

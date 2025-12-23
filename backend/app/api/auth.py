@@ -6,6 +6,9 @@ import logging
 from app.db.session import get_db
 from app.models.user import UserCreate, UserLogin, UserUpdate
 from app.services.auth_service import AuthService
+from app.services.otp_service import OTPService
+from app.utils.email_sender import send_email
+from app.core.config import settings
 from app.core.security import (
     get_current_user_id,
     verify_password,
@@ -68,6 +71,163 @@ async def register(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Server error during registration"
         )
+
+
+
+@router.post("/request-registration-otp")
+async def request_registration_otp(
+    user_data: UserCreate,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Start registration by creating an OTP and sending it via email. The client must then verify the OTP to finalize registration."""
+    try:
+        if not user_data.name or not user_data.email or not user_data.password:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please provide all required fields")
+
+        auth_service = AuthService(db)
+        existing_user = await auth_service.get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
+
+        otp_service = OTPService(db)
+        # store hashed password so it can be used once OTP is verified
+        from app.core.security import get_password_hash
+        password_hashed = get_password_hash(user_data.password)
+
+        otp_code = await otp_service.create_registration_otp(user_data.email, user_data.name, password_hashed, ttl_seconds=180)
+
+        # send email
+        subject = f"Your WWC verification code"
+        body = f"Your verification code is: {otp_code}\nIt will expire in 3 minutes."
+        sent = send_email(subject, user_data.email, body)
+
+        if not sent:
+            # don't leak internal specifics
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send verification email")
+
+        return {"success": True, "message": "Verification code sent to email"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Request OTP error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server error requesting OTP")
+
+
+@router.post("/verify-registration-otp")
+async def verify_registration_otp(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Verify OTP and create user if OTP is valid. Payload expected: {email, otp} """
+    try:
+        email = payload.get("email")
+        otp = payload.get("otp")
+        if not email or not otp:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and otp required")
+
+        auth_service = AuthService(db)
+        otp_service = OTPService(db)
+
+        verified = await otp_service.verify_registration_otp(email, otp)
+        if not verified:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP")
+
+        # create user with hashed password
+        user = await auth_service.create_user_with_hashed_password(verified.get("name"), verified.get("email"), verified.get("password_hashed"))
+
+        token = create_access_token(data={"sub": str(user["_id"])})
+
+        return {
+            "success": True,
+            "token": token,
+            "user": {
+                "id": str(user["_id"]),
+                "name": user["name"],
+                "email": user["email"],
+                "preferences": user.get("preferences", {}),
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Verify OTP error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server error verifying OTP")
+
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Request a password reset OTP for a registered email."""
+    try:
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email required")
+
+        auth_service = AuthService(db)
+        user = await auth_service.get_user_by_email(email)
+        if not user:
+            # Do not reveal whether email exists
+            return {"success": True, "message": "If an account exists, a verification code was sent to the email."}
+
+        otp_service = OTPService(db)
+        otp_code = await otp_service.create_password_reset_otp(email, str(user.get("_id")), ttl_seconds=180)
+
+        subject = "WWC Password Reset Code"
+        body = f"Your password reset code is: {otp_code}\nIt will expire in 3 minutes."
+        sent = send_email(subject, email, body)
+
+        if not sent:
+            logger.error(f"Failed to send password reset email to {email}")
+            # mask error
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send verification email")
+
+        return {"success": True, "message": "If an account exists, a verification code was sent to the email."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Request password reset error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server error requesting password reset")
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Verify OTP and reset password. Payload: {email, otp, new_password} """
+    try:
+        email = payload.get("email")
+        otp = payload.get("otp")
+        new_password = payload.get("new_password")
+
+        if not email or not otp or not new_password:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email, otp and new_password are required")
+
+        otp_service = OTPService(db)
+        verified = await otp_service.verify_password_reset_otp(email, otp)
+        if not verified:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP")
+
+        user_id = verified.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid reset payload")
+
+        # hash new password and update user
+        hashed = get_password_hash(new_password)
+        auth_service = AuthService(db)
+        updated = await auth_service.update_user(user_id, {"password": hashed})
+        if not updated:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password")
+
+        return {"success": True, "message": "Password updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server error resetting password")
 
 
 @router.post("/login")
