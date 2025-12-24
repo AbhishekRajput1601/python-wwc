@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     SMTP_USER: str | None = None
     SMTP_PASS: str | None = None
     EMAIL_FROM: str | None = None
+    # SendGrid
+    SENDGRID_API_KEY: str | None = None
     
     class Config:
         env_file = ".env"
