@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 import tempfile
 import os
 from faster_whisper import WhisperModel
+from app.services.captions_whisper_service import convert_to_wav_file
 
 from app.db.models import CAPTIONS_COLLECTION
 from app.core.config import settings
@@ -82,27 +83,33 @@ class CaptionService:
     ) -> dict:
         """Transcribe audio using Whisper model."""
         try:
-  
-            fd, temp_path = tempfile.mkstemp(suffix='.wav', prefix='whisper_tmp_')
-            os.close(fd)
-            
+            # If input is not WAV (based on mime_type), attempt conversion first
+            converted_path = None
             try:
-        
-                with open(temp_path, 'wb') as f:
-                    f.write(audio_data)
-                
-           
-                if not os.path.exists(temp_path):
-                    raise FileNotFoundError(f"Saved temp file not found: {temp_path}")
-                
-           
+                if mime_type and 'wav' not in mime_type.lower():
+                    try:
+                        converted_path = await convert_to_wav_file(audio_data, input_type=mime_type)
+                    except Exception:
+                        converted_path = None
+
+                if converted_path and os.path.exists(converted_path):
+                    target_path = converted_path
+                else:
+                    fd, temp_path = tempfile.mkstemp(suffix='.wav', prefix='whisper_tmp_')
+                    os.close(fd)
+                    with open(temp_path, 'wb') as f:
+                        f.write(audio_data)
+                    target_path = temp_path
+
+                if not os.path.exists(target_path):
+                    raise FileNotFoundError(f"Saved temp file not found: {target_path}")
+
                 segments, info = self.whisper_model.transcribe(
-                    temp_path,
+                    target_path,
                     language=language,
                     task='translate' if translate else 'transcribe'
                 )
-                
-    
+
                 captions = []
                 for segment in segments:
                     captions.append({
@@ -110,17 +117,21 @@ class CaptionService:
                         'end': segment.end,
                         'text': segment.text
                     })
-                
+
                 return {
                     'success': True,
-                    'language': info.language,
+                    'language': getattr(info, 'language', language),
                     'captions': captions
                 }
-            
             finally:
-  
+                # cleanup any temp files we created
                 try:
-                    if os.path.exists(temp_path):
+                    if converted_path and os.path.exists(converted_path):
+                        os.remove(converted_path)
+                except Exception:
+                    pass
+                try:
+                    if 'temp_path' in locals() and os.path.exists(temp_path):
                         os.remove(temp_path)
                 except Exception:
                     pass
@@ -141,13 +152,43 @@ class CaptionService:
     def format_captions(self, captions: List[dict], format: str = "txt") -> str:
         """Format captions for download."""
         if format == "txt":
-            lines = []
+            # Group captions by speaker and format timestamps nicely
+            from datetime import datetime
+
+            def fmt_ts(ts):
+                if not ts:
+                    return ""
+                try:
+                    if isinstance(ts, str):
+                        return ts
+                    if isinstance(ts, datetime):
+                        return ts.strftime("%Y-%m-%d %H:%M:%S")
+                    # fallback: try to convert
+                    return str(ts)
+                except Exception:
+                    return str(ts)
+
+            grouped = {}
             for caption in captions:
-                timestamp = caption.get("timestamp", "")
-                speaker = caption.get("speaker_name", "Unknown")
-                text = caption.get("original_text", "")
-                lines.append(f"[{timestamp}] {speaker}: {text}")
-            return "\n".join(lines)
+                speaker = caption.get("speaker_name") or caption.get("speaker") or "Unknown"
+                grouped.setdefault(speaker, []).append(caption)
+
+            parts = []
+            for speaker, entries in grouped.items():
+                parts.append(f"=== {speaker} ===")
+                # sort by timestamp if available
+                try:
+                    entries_sorted = sorted(entries, key=lambda e: e.get("timestamp") or e.get("start") or 0)
+                except Exception:
+                    entries_sorted = entries
+
+                for c in entries_sorted:
+                    ts = fmt_ts(c.get("timestamp") or c.get("start"))
+                    text = c.get("original_text") or c.get("text") or ""
+                    parts.append(f"[{ts}] {text}")
+                parts.append("")
+
+            return "\n".join(parts)
         
         elif format == "srt":
             lines = []

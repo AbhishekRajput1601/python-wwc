@@ -25,7 +25,24 @@ active_meetings: Dict[str, Set[str]] = {}
 socket_to_meeting: Dict[str, str] = {} 
 socket_to_user: Dict[str, dict] = {}  
 
+# Meetings that currently have captions enabled
+captions_enabled_meetings: Set[str] = set()
+# Optional per-meeting language selection
+meeting_languages: Dict[str, str] = {}
+
 logger = logging.getLogger(__name__)
+
+# Reduce engineio/socketio noisy INFO logs so terminal shows only important caption lines
+logging.getLogger('engineio').setLevel(logging.WARNING)
+logging.getLogger('socketio').setLevel(logging.WARNING)
+logging.getLogger('engineio.server').setLevel(logging.WARNING)
+logging.getLogger('socketio.server').setLevel(logging.WARNING)
+# Avoid noisy handlers from other libs
+for _n in ('engineio', 'engineio.server', 'socketio', 'socketio.server'):
+    lg = logging.getLogger(_n)
+    lg.propagate = False
+    if not lg.handlers:
+        lg.addHandler(logging.NullHandler())
 
 
 @sio.event
@@ -301,11 +318,47 @@ async def start_captions(sid, data):
  
     await sio.enter_room(sid, f"captions-{meeting_id}")
 
+    # Mark captions enabled for the meeting and remember language
+    try:
+        captions_enabled_meetings.add(meeting_id)
+        meeting_languages[meeting_id] = language
+    except Exception:
+        logger.exception("Failed to mark captions enabled for %s", meeting_id)
+
     await sio.emit(
         "captions-started",
         {
             "socketId": sid,
             "language": language
+        },
+        room=meeting_id
+    )
+
+
+@sio.event
+async def stop_captions(sid, data):
+    """Handle stop captions request."""
+    meeting_id = data.get("meetingId")
+    logger.info(f"Stopping captions for meeting {meeting_id} requested by {sid}")
+    try:
+        if meeting_id in captions_enabled_meetings:
+            captions_enabled_meetings.discard(meeting_id)
+        if meeting_id in meeting_languages:
+            del meeting_languages[meeting_id]
+    except Exception:
+        logger.exception("Failed to stop captions for %s", meeting_id)
+
+    # Leave captions room (best-effort)
+    try:
+        await sio.leave_room(sid, f"captions-{meeting_id}")
+    except Exception:
+        pass
+
+    await sio.emit(
+        "captions-stopped",
+        {
+            "socketId": sid,
+            "meetingId": meeting_id
         },
         room=meeting_id
     )
@@ -375,12 +428,18 @@ async def audio_data(sid, data):
     speaker_id = user["id"] if user else None
 
     logger.info(f"Received audio data from {speaker_name} in meeting {meeting_id}")
+    # If captions are not enabled for this meeting, ignore audio data
+    if meeting_id not in captions_enabled_meetings:
+        logger.info("Ignoring audio for meeting %s because captions are not enabled", meeting_id)
+        return
 
     # Transcribe using local faster_whisper model (no external service needed)
     try:
         db = get_database()
         caption_service = CaptionService(db)
-        result = await caption_service.transcribe_audio(audio_bytes, language=language, translate=translate, mime_type=mime_type)
+        # prefer the meeting-wide language if set
+        preferred_lang = meeting_languages.get(meeting_id) or language
+        result = await caption_service.transcribe_audio(audio_bytes, language=preferred_lang, translate=translate, mime_type=mime_type)
     except Exception as e:
         logger.exception("Transcription failed: %s", e)
         # notify clients in meeting that transcription failed
@@ -419,7 +478,9 @@ async def audio_data(sid, data):
             )
 
             try:
-                await caption_service.add_caption(meeting_id, caption_entry)
+                saved = await caption_service.add_caption(meeting_id, caption_entry)
+                # Log only the caption text that will be saved and visible
+                logger.info(f"CaptionSaved meeting={meeting_id} speaker={speaker_name} text={text[:200]}")
             except Exception:
                 logger.exception("Failed to save caption for meeting %s", meeting_id)
 
@@ -433,7 +494,13 @@ async def audio_data(sid, data):
                 "duration": duration,
             }
 
-            await sio.emit("caption-update", payload, room=meeting_id)
+            # Emit to meeting room and captions-specific room to ensure listeners receive it
+            try:
+                await sio.emit("caption-update", payload, room=meeting_id)
+                await sio.emit("caption-update", payload, room=f"captions-{meeting_id}")
+                logger.info(f"EmittedCaption meeting={meeting_id} speaker={speaker_name} text={text[:200]}")
+            except Exception:
+                logger.exception("Failed to emit caption-update for meeting %s", meeting_id)
     except Exception:
         logger.exception("Error processing captions for meeting %s", meeting_id)
 
@@ -500,6 +567,12 @@ async def on_answer(sid, data):
 @sio.on("ice-candidate")
 async def on_ice_candidate(sid, data):
     return await webrtc_ice_candidate(sid, data)
+
+
+# Compatibility alias for dashed client event name
+@sio.on("audio-data")
+async def on_audio_data(sid, data):
+    return await audio_data(sid, data)
 
 
 @sio.on("toggle-audio")

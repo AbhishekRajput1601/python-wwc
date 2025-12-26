@@ -116,7 +116,23 @@ const MeetingRoom = () => {
     setIsVideoOn((prev) => !prev);
   };
   const toggleCaptions = () => {
-    setShowCaptions((prev) => !prev);
+    setShowCaptions((prev) => {
+      const next = !prev;
+      try {
+        if (socket) {
+          if (next) {
+            console.log('[WWC] emitting start_captions', { meetingId, language: selectedLanguage });
+            socket.emit('start_captions', { meetingId, language: selectedLanguage });
+          } else {
+            console.log('[WWC] emitting stop_captions', { meetingId });
+            socket.emit('stop_captions', { meetingId });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to toggle captions on server', e);
+      }
+      return next;
+    });
   };
 
   // Continuous background audio streaming to server (always active when joined)
@@ -133,20 +149,25 @@ const MeetingRoom = () => {
       // convert Float32Array to 16-bit PCM WAV
       const buffer = encodeWAV(float32Buffer, sampleRate);
       try {
-        socket.emit('audio-data', {
-          meetingId,
-          audioData: buffer.buffer,
-          mimeType: 'audio/wav',
-          userId: user?._id,
-          userName: user?.name || 'User',
-          language: selectedLanguage || 'en',
-        });
+        // only send while captions are enabled
+        if (showCaptions) {
+          console.debug('[WWC] emitting audio-data (wav)', { meetingId, bytes: buffer.length });
+          socket.emit('audio-data', {
+            meetingId,
+            audioData: buffer.buffer,
+            mimeType: 'audio/wav',
+            userId: user?._id,
+            userName: user?.name || 'User',
+            language: selectedLanguage || 'en',
+          });
+        }
       } catch (err) {
         console.error('Failed to send WAV buffer:', err);
       }
     };
 
-    if (mediaStream && socket) {
+    // Only start streaming audio to server when captions are enabled by the user
+    if (mediaStream && socket && showCaptions) {
       try {
         // Try WebAudio capture + WAV encoding first
         if (useWavEncoding && (window.AudioContext || window.webkitAudioContext)) {
@@ -229,14 +250,18 @@ const MeetingRoom = () => {
           try {
             const arrayBuffer = await e.data.arrayBuffer();
             const chunkMime = recorder && recorder.mimeType ? recorder.mimeType : (mimeType || 'audio/webm');
-            socket.emit('audio-data', {
-              meetingId,
-              audioData: arrayBuffer,
-              mimeType: chunkMime,
-              userId: user?._id,
-              userName: user?.name || 'User',
-              language: selectedLanguage || 'en',
-            });
+            // Only send audio while captions are enabled
+            if (showCaptions) {
+              console.debug('[WWC] emitting audio-data (chunk)', { meetingId, size: e.data.size, mime: chunkMime });
+              socket.emit('audio-data', {
+                meetingId,
+                audioData: arrayBuffer,
+                mimeType: chunkMime,
+                userId: user?._id,
+                userName: user?.name || 'User',
+                language: selectedLanguage || 'en',
+              });
+            }
           } catch (err) {
             console.error('Failed to send MediaRecorder audio chunk:', err);
           }
@@ -270,7 +295,7 @@ const MeetingRoom = () => {
       }
       if (intervalId) clearInterval(intervalId);
     };
-  }, [mediaStream, socket, meetingId, user, selectedLanguage]);
+  }, [mediaStream, socket, meetingId, user, selectedLanguage, showCaptions]);
 
   // WAV encoder helpers
   const encodeWAV = (samples, sampleRate) => {
@@ -477,8 +502,21 @@ const MeetingRoom = () => {
         const sock = io(SOCKET_SERVER_URL, { transports: ["websocket"] });
         setSocket(sock);
         sock.on("connect", () => {
+          console.log('[WWC] socket connected', sock.id);
           setSelfSocketId(sock.id);
         });
+
+        // Caption update handler: register early so we don't miss events
+        const onCaptionUpdateEarly = (payload) => {
+          try {
+            console.log('[WWC] received caption-update', payload);
+            const text = payload?.text || payload?.original_text || "";
+            setCurrentCaption(text || "");
+          } catch (e) {
+            console.warn('caption-update early handler error', e);
+          }
+        };
+        sock.on('caption-update', onCaptionUpdateEarly);
 
         sock.emit("join-meeting", {
           meetingId,
@@ -617,6 +655,17 @@ const MeetingRoom = () => {
     socket.on("user-started-screen-share", onStart);
     socket.on("user-stopped-screen-share", onStop);
 
+    const onCaptionUpdate = (payload) => {
+      try {
+        // payload: { meetingId, speakerId, speakerName, text, start, end, duration }
+        const text = payload?.text || payload?.original_text || "";
+        setCurrentCaption(text || "");
+      } catch (e) {
+        console.warn('caption-update handler error', e);
+      }
+    };
+    socket.on('caption-update', onCaptionUpdate);
+
     const onMeetingEnded = ({ meetingId: mid, reason }) => {
       console.log("Meeting ended event received", mid, reason);
       setMeetingEnded(true);
@@ -643,6 +692,7 @@ const MeetingRoom = () => {
       socket.off("user-started-screen-share", onStart);
       socket.off("user-stopped-screen-share", onStop);
       socket.off("meeting-ended", onMeetingEnded);
+      socket.off('caption-update', onCaptionUpdate);
     };
   }, [socket]);
 
