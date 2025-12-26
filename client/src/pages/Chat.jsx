@@ -151,13 +151,7 @@ const Chat = ({ socket: externalSocket, onClose }) => {
             </button>
           </div>
           <div className="text-center animate-fade-in w-full">
-            <div className="mx-auto w-20 h-20 bg-gradient-to-br from-wwc-600 to-wwc-700 rounded-3xl flex items-center justify-center shadow-hard mb-6">
-              <div className="animate-pulse-soft">
-                <span className="text-white font-bold text-2xl font-display">W</span>
-              </div>
-            </div>
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-wwc-500 mx-auto mb-4"></div>
-            <p className="text-neutral-900 font-semibold text-lg">Loading Chat...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-wwc-200 border-t-wwc-600 mx-auto"></div>
           </div>
         </div>
         </div>

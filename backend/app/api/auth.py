@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.models.user import UserCreate, UserLogin, UserUpdate
 from app.services.auth_service import AuthService
 from app.services.otp_service import OTPService
-from app.utils.email_sender import send_email
+from app.utils.email_sender import send_email, build_otp_email
 from app.core.config import settings
 from app.core.security import (
     get_current_user_id,
@@ -96,10 +96,11 @@ async def request_registration_otp(
 
         otp_code = await otp_service.create_registration_otp(user_data.email, user_data.name, password_hashed, ttl_seconds=180)
 
-        # send email
+        # send email (HTML)
         subject = f"Your WWC verification code"
         body = f"Your verification code is: {otp_code}\nIt will expire in 3 minutes."
-        sent = send_email(subject, user_data.email, body)
+        html = build_otp_email(otp_code, expires_minutes=3)
+        sent = send_email(subject, user_data.email, body, html=html)
 
         if not sent:
             # don't leak internal specifics
@@ -177,7 +178,8 @@ async def request_password_reset(
 
         subject = "WWC Password Reset Code"
         body = f"Your password reset code is: {otp_code}\nIt will expire in 3 minutes."
-        sent = send_email(subject, email, body)
+        html = build_otp_email(otp_code, expires_minutes=3)
+        sent = send_email(subject, email, body, html=html)
 
         if not sent:
             logger.error(f"Failed to send password reset email to {email}")

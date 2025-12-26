@@ -88,14 +88,7 @@ const AllUsers = ({ user, isMuted, participants, onClose, loading = false }) => 
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-          <div className="text-center">
-            <div className="mx-auto w-12 h-12 bg-gradient-to-br from-wwc-600 to-wwc-700 rounded-2xl flex items-center justify-center shadow-hard mb-4">
-              <div className="animate-pulse-soft">
-                <span className="text-white font-bold">W</span>
-              </div>
-            </div>
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-wwc-500 mx-auto"></div>
-          </div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-wwc-200 border-t-wwc-600"></div>
         </div>
       )}
       </div>

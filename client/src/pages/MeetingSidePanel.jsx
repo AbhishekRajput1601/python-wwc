@@ -6,12 +6,12 @@ export default function MeetingSidePanel({ activePanel, socket, user, isMuted, p
   return (
     <>
       {activePanel === "chat" && (
-        <Suspense fallback={<div className="p-4 text-center text-neutral-600 text-sm">Loading Chat...</div>}>
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-wwc-200 border-t-wwc-600"></div></div>}>
           <Chat socket={socket} onClose={() => setActivePanel(null)} />
         </Suspense>
       )}
       {activePanel === "users" && (
-        <Suspense fallback={<div className="p-4 text-center text-neutral-600 text-sm">Loading Users...</div>}>
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-wwc-200 border-t-wwc-600"></div></div>}>
           <AllUsers user={user} isMuted={isMuted} participants={participants} onClose={() => setActivePanel(null)} />
         </Suspense>
       )}
