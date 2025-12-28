@@ -169,7 +169,7 @@ const AdminDashboard = () => {
 
   const stats = useMemo(() => {
     const totalUsers = users.length;
-    const adminUsers = users.filter((u) => u.role === "admin").length;
+    const adminUsers = users.filter((u) => (u.role || "").toLowerCase() === "admin").length;
     const regularUsers = users.filter((u) => u.role === "user").length;
 
     const totalMeetings = meetings.length;
@@ -324,7 +324,7 @@ const AdminDashboard = () => {
     );
   }
 
-  if (user?.role !== "admin") {
+  if ((user?.role || "").toLowerCase() !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-medium p-8 text-center">

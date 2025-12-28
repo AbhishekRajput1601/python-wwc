@@ -3,7 +3,7 @@ import api from '../utils/api.js';
 class AuthService {
   async updateUserDetails(details) {
     try {
-      const response = await api.post('/auth/update-details', details);
+      const response = await api.put('/auth/update-user', details);
       return response.data;
     } catch (error) {
       return {
