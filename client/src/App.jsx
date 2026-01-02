@@ -1,6 +1,6 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
-import { AuthProvider } from './context/AuthContext'
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Navbar from './components/Layout/Navbar'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
@@ -10,6 +10,25 @@ import Login from './components/Auth/Login'
 import Signup from './components/Auth/Signup'
 import ForgotPassword from './components/Auth/ForgotPassword'
 import UserProfile from './components/Auth/UserProfile'
+
+// Protected route component
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  const { setRedirectTo } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    // Store the location they were trying to access
+    setRedirectTo(location.pathname);
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   const InnerApp = () => {
@@ -25,7 +44,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
-          <Route path="/meeting/:meetingId" element={<MeetingRoom />} />
+          <Route path="/meeting/:meetingId" element={<ProtectedRoute><MeetingRoom /></ProtectedRoute>} />
           <Route path="/profile" element={<UserProfile />} />
         </Routes>
       </div>

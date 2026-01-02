@@ -11,18 +11,22 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const { dispatch, isAuthenticated, user } = useAuth();
+  const { dispatch, isAuthenticated, user, redirectTo, clearRedirectTo } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      if (user.name === "admin") {
+      // If there's a redirect destination, use it; otherwise go to dashboard
+      if (redirectTo) {
+        navigate(redirectTo, { replace: true });
+        clearRedirectTo();
+      } else if (user.name === "admin") {
         navigate("/admin-dashboard", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
       }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, redirectTo, clearRedirectTo]);
 
   const handleChange = (e) => {
     setFormData({
@@ -48,11 +52,7 @@ const Login = () => {
           },
         });
 
-        if (result.data.user.name === "admin") {
-          navigate("/admin-dashboard", { replace: true });
-        } else {
-          navigate("/dashboard", { replace: true });
-        }
+        // navigation handled by useEffect which respects any stored redirect
       } else {
         setError(result.message);
       }

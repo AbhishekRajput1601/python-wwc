@@ -9,6 +9,7 @@ const initialState = {
     isAuthenticated: authService.isAuthenticated(),
   loading: true,
   error: null,
+  redirectTo: null,
 };
 
 const authReducer = (state, action) => {
@@ -54,6 +55,16 @@ const authReducer = (state, action) => {
       return {
         ...state,
         loading: action.payload,
+      };
+    case 'SET_REDIRECT_TO':
+      return {
+        ...state,
+        redirectTo: action.payload,
+      };
+    case 'CLEAR_REDIRECT_TO':
+      return {
+        ...state,
+        redirectTo: null,
       };
     default:
       return state;
@@ -109,6 +120,16 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'CLEAR_ERRORS' });
   };
 
+  // Set redirect destination
+  const setRedirectTo = (path) => {
+    dispatch({ type: 'SET_REDIRECT_TO', payload: path });
+  };
+
+  // Clear redirect destination
+  const clearRedirectTo = () => {
+    dispatch({ type: 'CLEAR_REDIRECT_TO' });
+  };
+
   // Update user preferences
   const updatePreferences = async (preferences) => {
     try {
@@ -131,7 +152,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     loadUser();
   }, []);
-
   return (
     <AuthContext.Provider
       value={{
@@ -141,6 +161,8 @@ export const AuthProvider = ({ children }) => {
         clearErrors,
         loadUser,
         updatePreferences,
+        setRedirectTo,
+        clearRedirectTo,
       }}
     >
       {children}
