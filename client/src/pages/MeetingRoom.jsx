@@ -45,6 +45,7 @@ const MeetingRoom = () => {
   const [socket, setSocket] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const socketIdToUserId = useRef({});
   const peerConnections = useRef({});
   const iceServers = useRef(null);
   const [selfSocketId, setSelfSocketId] = useState(null);
@@ -504,6 +505,12 @@ const MeetingRoom = () => {
         sock.on("connect", () => {
           console.log('[WWC] socket connected', sock.id);
           setSelfSocketId(sock.id);
+          // HARD reset local state on reconnect to avoid duplicate peers
+          Object.values(peerConnections.current).forEach((pc) => pc.close());
+          peerConnections.current = {};
+          setParticipants([]);
+          setRemoteStreams({});
+          socketIdToUserId.current = {};
         });
 
         // Caption update handler: register early so we don't miss events
@@ -539,28 +546,71 @@ const MeetingRoom = () => {
         });
 
         sock.on("existing-participants", (existing) => {
-          const uniq = Array.from(
-            new Map(existing.map((p) => [p.socketId, p])).values()
+          // dedupe by userId (preferred) falling back to socketId
+          const mapped = existing.map(p => ({ ...p }));
+          const uniqByUser = Array.from(
+            new Map(mapped.map((p) => [p.userId || p.socketId, p])).values()
           ).filter((p) => p.socketId !== sock.id);
-          setParticipants(uniq);
 
-          uniq.forEach((p) => {
-            createPeerConnection(p.socketId, localStream, sock, true);
+          // map socketId -> userId for later lookups
+          uniqByUser.forEach(p => {
+            if (p.userId) socketIdToUserId.current[p.socketId] = p.userId;
+            else socketIdToUserId.current[p.socketId] = p.socketId;
+          });
+
+          setParticipants(uniqByUser);
+
+          uniqByUser.forEach((p) => {
+            createPeerConnection(p.socketId, localStream, sock, true, p.userId);
           });
         });
 
         sock.on("user-joined", (data) => {
           if (data.socketId === sock.id) return;
 
+          // remove any existing participant with same userId to prevent duplicates
           setParticipants((prev) => {
-            const exists = prev.some((p) => p.socketId === data.socketId);
-            if (exists) {
-              return prev;
-            }
-            return [...prev, data];
+            const filtered = prev.filter(
+              (p) => String(p.userId) !== String(data.userId)
+            );
+            return [...filtered, data];
           });
 
-          createPeerConnection(data.socketId, localStream, sock, false);
+          // update mapping and create peer
+          socketIdToUserId.current[data.socketId] = data.userId || data.socketId;
+          createPeerConnection(data.socketId, localStream, sock, false, data.userId);
+        });
+
+        // Handle server telling us a user reconnected (refresh case)
+        sock.on("user-reconnected", ({ userId, userName, oldSocketId, newSocketId }) => {
+          console.log('[WWC] user-reconnected', { userId, oldSocketId, newSocketId });
+
+          // 1) Remove old participant entry
+          setParticipants(prev => prev.filter(p => p.socketId !== oldSocketId));
+
+          // 2) Close old peer connection
+          if (peerConnections.current[oldSocketId]) {
+            try { peerConnections.current[oldSocketId].close(); } catch (e) {}
+            delete peerConnections.current[oldSocketId];
+          }
+
+          // 3) Remove old streams (both keyed by socketId and userId)
+          setRemoteStreams(prev => {
+            const copy = { ...prev };
+            delete copy[oldSocketId];
+            delete copy[userId];
+            return copy;
+          });
+
+          // 4) Update mapping and add participant for new socket
+          socketIdToUserId.current[newSocketId] = userId || newSocketId;
+          setParticipants(prev => {
+            const filtered = prev.filter(p => String(p.userId) !== String(userId));
+            return [...filtered, { socketId: newSocketId, userId, userName }];
+          });
+
+          // 5) Create new peer connection for the new socket id
+          createPeerConnection(newSocketId, localStream, sock, false, userId);
         });
 
         // Offer
@@ -600,12 +650,10 @@ const MeetingRoom = () => {
           }
         });
 
-        sock.on("user-left", ({ socketId }) => {
-          console.log("User left:", socketId);
+        sock.on("user-left", ({ socketId, userId }) => {
+          console.log("User left:", socketId, userId);
 
-          setParticipants((prev) =>
-            prev.filter((p) => p.socketId !== socketId)
-          );
+          setParticipants((prev) => prev.filter((p) => p.socketId !== socketId && String(p.userId) !== String(userId)));
 
           if (peerConnections.current[socketId]) {
             peerConnections.current[socketId].close();
@@ -615,6 +663,7 @@ const MeetingRoom = () => {
           setRemoteStreams((prev) => {
             const copy = { ...prev };
             delete copy[socketId];
+            if (userId) delete copy[userId];
             return copy;
           });
 
@@ -895,7 +944,7 @@ const MeetingRoom = () => {
     if (mr && mr.state !== "inactive") mr.stop();
   };
 
-  const createPeerConnection = (socketId, localStream, sock, isInitiator) => {
+  const createPeerConnection = (socketId, localStream, sock, isInitiator, userId) => {
     if (peerConnections.current[socketId]) return;
     const rtcConfig = iceServers.current || {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -917,24 +966,23 @@ const MeetingRoom = () => {
 
     pc.ontrack = (event) => {
       console.log('[WWC] Received track:', event.track.kind, event.track.id.substring(0, 8), 'from:', socketId);
-      
-      // Combine all incoming tracks into a single stream
+      // Prefer to key streams by userId (if known), fallback to socketId
+      const uid = socketIdToUserId.current[socketId] || userId || null;
+      const key = uid || socketId;
+
       setRemoteStreams((prev) => {
-        const existingStream = prev[socketId];
-        
+        const existingStream = prev[key];
         if (existingStream) {
-          // Add the new track to existing stream if not already there
           const trackExists = existingStream.getTracks().some(t => t.id === event.track.id);
           if (!trackExists) {
-            existingStream.addTrack(event.track);
+            try { existingStream.addTrack(event.track); } catch (e) {}
             console.log('[WWC] Added track to existing stream. Total tracks:', existingStream.getTracks().length);
           }
-          return { ...prev }; // Return new object to trigger re-render
+          return { ...prev };
         } else {
-          // Create new stream with this track
           const newStream = new MediaStream([event.track]);
-          console.log('[WWC] Created new stream for:', socketId);
-          return { ...prev, [socketId]: newStream };
+          console.log('[WWC] Created new stream for key:', key);
+          return { ...prev, [key]: newStream };
         }
       });
     };

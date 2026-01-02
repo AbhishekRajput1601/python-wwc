@@ -161,11 +161,16 @@ export default function MeetingStage({
   const uniqueParticipants = Array.from(new Map(participants.map((p) => [p.socketId, p])).values()).filter(
     (p) => p.socketId !== selfSocketId && p.socketId !== socket?.id
   );
-  uniqueParticipants.forEach((p) => {
-    const s = remoteStreams[p.socketId];
+  // Deduplicate by userId where possible and prefer userId as key for streams
+  const uniqByUser = Array.from(new Map(participants.map((p) => [p.userId || p.socketId, p])).values()).filter(
+    (p) => p.socketId !== selfSocketId && p.socketId !== socket?.id
+  );
+  uniqByUser.forEach((p) => {
+    const streamKey = p.userId || p.socketId;
+    const s = remoteStreams[streamKey] || remoteStreams[p.socketId];
     if (s) {
       tiles.push({
-        key: p.socketId,
+        key: streamKey,
         stream: s,
         label: p.userName || "Participant",
         isLocal: false,
