@@ -228,30 +228,38 @@ export default function MeetingStage({
     const cx = w / 2;
     const cy = h / 2;
 
-    const maxOuterRadius = Math.max(300, Math.min(w, h) / 2 - tilePx - 420);
-    const minRadius = Math.max(tilePx * 4.0, 240);
+    // Enforce a strict minimum center-to-center distance to avoid collisions
+    const MIN_DISTANCE = tilePx * 1.25;
+    const RING_GAP = tilePx * 1.6;
 
-    const perRing = 3;
-    const rings = Math.max(1, Math.ceil(others.length / perRing));
+    let ringIndex = 1;
+    let placed = 0;
+    const result = [];
 
-    const assigned = [];
-    let idx = 0;
-    for (let r = 0; r < rings; r++) {
-      const itemsInRing = Math.ceil((others.length - idx) / (rings - r));
+    while (placed < others.length) {
+      const radius = ringIndex * RING_GAP + tilePx;
+      const circumference = 2 * Math.PI * radius;
 
-      const ringRadius = rings === 1 ? maxOuterRadius : minRadius + ((maxOuterRadius - minRadius) * ((r + 1) / (rings + 1)));
-      for (let j = 0; j < itemsInRing && idx < others.length; j++, idx++) {
-        const o = others[idx];
+      // hard cap per ring based on MIN_DISTANCE
+      const maxInRing = Math.max(1, Math.floor(circumference / MIN_DISTANCE));
+      const count = Math.min(maxInRing, others.length - placed);
 
-        const baseAngle = (2 * Math.PI * j) / itemsInRing;
-        const jitter = (hashKeyToAngle(o.key, idx) % (Math.PI * 2)) * 0.02; 
-        const angle = baseAngle + jitter;
-        const x = cx + Math.cos(angle) * ringRadius - tilePx / 2;
-        const y = cy + Math.sin(angle) * ringRadius - tilePx / 2;
-        assigned.push({ key: o.key, left: x, top: y });
+      for (let i = 0; i < count; i++) {
+        const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; // slight deterministic offset
+
+        const x = cx + Math.cos(angle) * radius - tilePx / 2;
+        const y = cy + Math.sin(angle) * radius - tilePx / 2;
+
+        result.push({ key: others[placed].key, left: x, top: y });
+        placed++;
       }
+
+      ringIndex++;
+      // safety to avoid infinite loops
+      if (ringIndex > 100) break;
     }
-    return assigned;
+
+    return result;
   }, [others, stageSize, tilePx]);
 
   if (activeShareId) {
