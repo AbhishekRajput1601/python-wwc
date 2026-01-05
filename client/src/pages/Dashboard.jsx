@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
+import notify from '../utils/notifications';
 
 const Dashboard = () => {
   const { user, isAuthenticated } = useAuth();
@@ -40,64 +41,87 @@ const Dashboard = () => {
       const meeting = response.data.meeting;
       setMeetings([meeting, ...meetings]);
       setNewMeeting({ title: "", description: "" });
+      notify.success('Meeting created successfully');
       navigate(`/meeting/${meeting.meetingId}`);
     } catch (error) {
       console.error("Error creating meeting:", error);
     }
   };
 
-  const handleJoinMeeting = (e) => {
+  const handleJoinMeeting = async (e) => {
     e.preventDefault();
-    if (joinMeetingId.trim()) {
-      (async () => {
-        try {
-          const res = await api.post("/meetings/add-user-in-meeting", {
-            meetingId: joinMeetingId.trim(),
-            userId: user.id,
-          });
-          if (res && res.data && res.data.data) {
-            const joinedMeeting = res.data.data;
-            setMeetings((prev) => {
-              const exists = prev.some(
-                (m) => m.meetingId === joinedMeeting.meetingId
-              );
-              if (exists) return prev;
-              return [joinedMeeting, ...prev];
-            });
-          }
-        } catch (err) {
-          console.error("Error joining meeting:", err);
-        } finally {
-          navigate(`/meeting/${joinMeetingId.trim()}`);
-        }
-      })();
+    const id = joinMeetingId.trim();
+    if (!id) return;
+
+    try {
+      // Fetch meeting first and validate status
+      const meetingRes = await api.get(`/meetings/${id}`);
+      const meeting = meetingRes?.data?.meeting;
+      if (!meeting) {
+        notify.error('Meeting not found');
+        return;
+      }
+
+      if (meeting.status === 'ended') {
+        notify.error('This meeting has ended.');
+        return;
+      }
+
+      const res = await api.post('/meetings/add-user-in-meeting', {
+        meetingId: id,
+        userId: user.id,
+      });
+
+      if (res && res.data && res.data.data) {
+        const joinedMeeting = res.data.data;
+        setMeetings((prev) => {
+          const exists = prev.some((m) => m.meetingId === joinedMeeting.meetingId);
+          if (exists) return prev;
+          return [joinedMeeting, ...prev];
+        });
+        notify.success('Joined meeting');
+        navigate(`/meeting/${id}`);
+      } else {
+        notify.error('Failed to join meeting');
+      }
+    } catch (err) {
+      console.error('Error joining meeting:', err);
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to join meeting';
+      notify.error(msg);
     }
   };
 
   const handleDeleteMeeting = async (meetingId) => {
-    const meetingObj = meetings.find((m) => m.meetingId === meetingId);
-    const hostId =
-      meetingObj &&
-      meetingObj.host &&
-      (meetingObj.host._id
-        ? String(meetingObj.host._id)
-        : String(meetingObj.host));
-    const isHost = hostId && String(hostId) === String(user?.id || user?._id);
-
-    const confirmMessage = isHost
-      ? "Are you sure you want to DELETE this meeting for everyone? This action cannot be undone."
-      : "Remove this meeting from your recent meetings? This will not affect other users.";
-
-    if (!window.confirm(confirmMessage)) return;
 
     try {
-      const res = await api.delete(`/meetings/delete-meeting/${meetingId}`);
-      setMeetings((prev) =>
-        prev.filter((meeting) => meeting.meetingId !== meetingId)
-      );
+      await api.delete(`/meetings/delete-meeting/${meetingId}`);
+      setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== meetingId));
     } catch (error) {
       console.error("Error deleting meeting:", error);
-      alert("Failed to remove meeting. Please try again.");
+      notify.error("Failed to remove meeting. Please try again.");
+    }
+  };
+
+  // Confirmation modal state and handlers
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+
+  const onDeleteClick = (meetingId) => {
+    setConfirmTarget(meetingId);
+    setShowConfirm(true);
+  };
+
+  const confirmDeleteMeeting = async () => {
+    if (!confirmTarget) return;
+    try {
+      await api.delete(`/meetings/delete-meeting/${confirmTarget}`);
+      setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
+    } catch (error) {
+      console.error("Error deleting meeting:", error);
+      notify.error("Failed to remove meeting. Please try again.");
+    } finally {
+      setShowConfirm(false);
+      setConfirmTarget(null);
     }
   };
 
@@ -117,6 +141,7 @@ const Dashboard = () => {
             Loading your WWC dashboard...
           </p>
         </div>
+ 
       </div>
     );
   }
@@ -417,9 +442,9 @@ const Dashboard = () => {
                             ? "Delete meeting for everyone"
                             : "Remove this meeting from your recent list";
                           return (
-                            <button
+                              <button
                               onClick={() =>
-                                handleDeleteMeeting(meeting.meetingId)
+                                onDeleteClick(meeting.meetingId)
                               }
                               className="bg-white text-black border-2 border-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-200 transition-all duration-200 shadow-soft hover:shadow-medium whitespace-nowrap"
                               title={title}
@@ -478,6 +503,19 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black opacity-40" onClick={() => { setShowConfirm(false); setConfirmTarget(null); }}></div>
+          <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-md mx-auto p-6 z-10">
+            <h3 className="text-lg font-semibold text-neutral-900 mb-2">are you sure</h3>
+            <p className="text-sm text-neutral-600 mb-4">This action will remove the meeting from your list.</p>
+            <div className="flex justify-end items-center gap-3">
+              <button onClick={() => { setShowConfirm(false); setConfirmTarget(null); }} className="px-4 py-2 rounded-lg bg-neutral-100 text-neutral-800 hover:bg-neutral-200">Cancel</button>
+              <button onClick={confirmDeleteMeeting} className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

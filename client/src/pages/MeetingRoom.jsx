@@ -7,6 +7,7 @@ import io from "socket.io-client";
 import meetingService from "../services/meetingService";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import notify from '../utils/notifications';
 
 const SOCKET_SERVER_URL =
   import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
@@ -68,6 +69,8 @@ const MeetingRoom = () => {
 
         setMeeting(result.meeting);
 
+        notify.success('Meeting ended');
+
         if (mediaStream) {
           mediaStream.getTracks().forEach((track) => track.stop());
         }
@@ -77,9 +80,11 @@ const MeetingRoom = () => {
         }, 2000);
       } else {
         setEndMeetingError(result.message || "Failed to end meeting.");
+        notify.error(result.message || "Failed to end meeting.");
       }
     } catch (err) {
       setEndMeetingError("Failed to end meeting.");
+      notify.error('Failed to end meeting.');
     }
     setEndingMeeting(false);
   };
@@ -359,7 +364,7 @@ const MeetingRoom = () => {
     if (!isScreenSharing) {
       try {
         if (!supportsDisplayMedia()) {
-          alert(
+          notify.error(
             "Screen sharing is not supported on this device or browser. Try using a desktop browser."
           );
           return;
@@ -781,14 +786,17 @@ const MeetingRoom = () => {
   })();
 
   const startRecording = () => {
-    if (!mediaStream) return alert("No media stream (microphone) available");
+    if (!mediaStream) {
+      notify.error("No media stream (microphone) available");
+      return;
+    }
     (async () => {
       try {
         let screenStream = null;
         const isMobile = isMobileDevice();
         if (isMobile) {
           if (!supportsDisplayMedia()) {
-            alert(
+            notify.error(
               "Screen recording is not supported on this mobile browser. Please use a browser that supports screen capture or use a desktop."
             );
             return;
@@ -797,7 +805,7 @@ const MeetingRoom = () => {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
           } catch (e) {
             console.warn("Screen capture not started on mobile", e);
-            alert("Screen recording was not started. Please allow screen capture or try again.");
+            notify.error("Screen recording was not started. Please allow screen capture or try again.");
             return;
           }
         } else {
@@ -872,11 +880,11 @@ const MeetingRoom = () => {
               if (m.success) setMeeting(m.meeting);
             } else {
               console.error("Failed to upload recording:", uploadRes.message);
-              alert("Failed to upload recording: " + (uploadRes.message || ""));
+              notify.error("Failed to upload recording: " + (uploadRes.message || ""));
             }
           } catch (err) {
             console.error("Upload error", err);
-            alert("Upload error: " + (err.message || err));
+            notify.error("Upload error: " + (err.message || err));
           } finally {
             setIsUploadingRecording(false);
           }
@@ -899,7 +907,7 @@ const MeetingRoom = () => {
         mr.start(1000);
       } catch (err) {
         console.error("Start recording failed", err);
-        alert("Could not start screen recording: " + (err.message || err));
+        notify.error("Could not start screen recording: " + (err.message || err));
       }
     })();
   };

@@ -79,6 +79,15 @@ async def join_meeting(sid, data):
     user_name = data.get("userName", "User")
     
     logger.info(f"User {user_name} ({user_id}) joining meeting: {meeting_id}")
+    # Check meeting status in DB and reject if it has ended
+    try:
+        db = get_database()
+        doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"status": 1})
+        if doc and doc.get("status") == "ended":
+            await sio.emit("join-error", {"message": "This meeting has ended."}, to=sid)
+            return
+    except Exception:
+        logger.exception("Failed to check meeting status for %s", meeting_id)
 
     await sio.enter_room(sid, meeting_id)
     # Check for an existing connection for this user in the same meeting.

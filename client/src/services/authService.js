@@ -1,14 +1,18 @@
 import api from '../utils/api.js';
+import notify from '../utils/notifications.js';
 
 class AuthService {
   async updateUserDetails(details) {
     try {
       const response = await api.put('/auth/update-user', details);
+      if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to update user details';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to update user details',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -21,13 +25,15 @@ class AuthService {
         sessionStorage.setItem('token', response.data.token);
         api.setAuthToken(response.data.token);
       }
-      
+      if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
       console.error('Registration error:', error);
+      const message = error.response?.data?.message || 'Registration failed';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Registration failed',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -53,11 +59,14 @@ class AuthService {
         sessionStorage.setItem('token', response.data.token);
         api.setAuthToken(response.data.token);
       }
+      if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to verify code';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to verify code',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -66,11 +75,14 @@ class AuthService {
   async requestPasswordReset(payload) {
     try {
       const response = await api.post('/auth/request-password-reset', payload);
+      if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to request password reset';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to request password reset',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -79,11 +91,14 @@ class AuthService {
   async resetPassword(payload) {
     try {
       const response = await api.post('/auth/reset-password', payload);
+      if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to reset password';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to reset password',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -96,7 +111,7 @@ class AuthService {
         sessionStorage.setItem('token', response.data.token);
         api.setAuthToken(response.data.token);
       }
-      
+      notify.success('Login successfully');
       return {
         success: true,
         data: response.data,
@@ -104,9 +119,11 @@ class AuthService {
         token: response.data.token
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Login failed';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Login failed',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -117,7 +134,7 @@ class AuthService {
       await api.post('/auth/logout');
       sessionStorage.removeItem('token');
       api.setAuthToken(null);
-      
+      notify.success('Logged out successfully');
       return {
         success: true,
         message: 'Logged out successfully'
@@ -125,7 +142,7 @@ class AuthService {
     } catch (error) {
       sessionStorage.removeItem('token');
       api.setAuthToken(null);
-      
+      notify.success('Logged out');
       return {
         success: true,
         message: 'Logged out successfully'
@@ -136,16 +153,17 @@ class AuthService {
   async getProfile() {
     try {
       const response = await api.get('/auth/me');
-      
       return {
         success: true,
         data: response.data,
         user: response.data.user
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to get user profile';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to get user profile',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -154,16 +172,18 @@ class AuthService {
   async updatePreferences(preferences) {
     try {
       const response = await api.put('/auth/preferences', preferences);
-      
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data,
         user: response.data.user
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to update preferences';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to update preferences',
+        message,
         error: error.response?.data || error.message
       };
     }

@@ -1,19 +1,22 @@
 import api from '../utils/api.js';
+import notify from '../utils/notifications.js';
 
 class MeetingService {
   async createMeeting(meetingData) {
     try {
       const response = await api.post('/meetings', meetingData);
-      
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data,
         meeting: response.data.meeting
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to create meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to create meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -58,16 +61,18 @@ class MeetingService {
   async joinMeeting(meetingId) {
     try {
       const response = await api.post(`/meetings/${meetingId}/join`);
-      
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data,
         meeting: response.data.meeting
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to join meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to join meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -76,15 +81,17 @@ class MeetingService {
   async leaveMeeting(meetingId) {
     try {
       const response = await api.post(`/meetings/${meetingId}/leave`);
-      
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to leave meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to leave meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -93,16 +100,18 @@ class MeetingService {
   async updateMeeting(meetingId, updateData) {
     try {
       const response = await api.put(`/meetings/${meetingId}`, updateData);
-      
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data,
         meeting: response.data.meeting
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to update meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to update meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -111,14 +120,17 @@ class MeetingService {
   async deleteMeeting(meetingId) {
     try {
       const response = await api.delete(`/meetings/${meetingId}`);
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to delete meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to delete meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -127,15 +139,18 @@ class MeetingService {
   async endMeeting(meetingId) {
     try {
       const response = await api.post(`/meetings/${meetingId}/end`);
+      if (response.data?.message) notify.success(response.data.message);
       return {
         success: true,
         data: response.data,
         meeting: response.data.meeting
       };
     } catch (error) {
+      const message = error.response?.data?.message || 'Failed to end meeting';
+      notify.error(message);
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to end meeting',
+        message,
         error: error.response?.data || error.message
       };
     }
@@ -147,9 +162,12 @@ class MeetingService {
       formData.append('file', fileBlob, `recording-${meetingId}.webm`);
       const response = await api.post(`/meetings/${meetingId}/recordings`, formData);
 
+      if (response.data?.message) notify.success(response.data.message || 'Recording uploaded');
       return { success: true, data: response.data };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Failed to upload recording', error: error.response?.data || error.message };
+      const message = error.response?.data?.message || 'Failed to upload recording';
+      notify.error(message);
+      return { success: false, message, error: error.response?.data || error.message };
     }
   }
 }

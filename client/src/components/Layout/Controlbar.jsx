@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import meetingService from "../../services/meetingService";
+import notify from '../../utils/notifications';
 
 const Controlbar = ({
   isMuted,
@@ -58,11 +59,11 @@ const Controlbar = ({
     const meetingLink = `${window.location.origin}/meeting/${meetingId}`;
     navigator.clipboard.writeText(meetingLink).then(
       () => {
-        alert("Meeting link copied to clipboard!");
+        notify.success("Meeting link copied to clipboard!");
       },
       (err) => {
         console.error("Could not copy text: ", err);
-        alert("Failed to copy link. Please copy manually: " + meetingLink);
+        notify.error("Failed to copy link. Please copy manually: " + meetingLink);
       }
     );
   };

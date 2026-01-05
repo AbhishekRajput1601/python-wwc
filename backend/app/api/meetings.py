@@ -85,13 +85,18 @@ async def join_meeting(
 ):
 
     meeting_service = MeetingService(db)
-    meeting = await meeting_service.join_meeting(meeting_id, user_id)
-    
+    # validate meeting exists and is not ended before joining
+    meeting = await meeting_service.get_meeting_by_id(meeting_id)
     if not meeting:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Meeting not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    if meeting.get("status") == "ended":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This meeting has ended.")
+
+    meeting = await meeting_service.join_meeting(meeting_id, user_id)
+    if not meeting:
+        # fallback: if join failed for unexpected reason
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to join meeting")
     
     return {
         "success": True,

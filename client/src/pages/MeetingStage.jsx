@@ -277,22 +277,48 @@ export default function MeetingStage({
       cameraStream = mediaStream;
     } else {
       // Remote user is sharing - need to split the tracks
-      const remoteStream = remoteStreams[remoteScreenSharerId];
+      // Try to resolve the remote stream by socketId first, then by participant userId.
+      let remoteStream = remoteStreams[remoteScreenSharerId] || null;
+      if (!remoteStream) {
+        const participant = participants.find((p) => p.socketId === remoteScreenSharerId);
+        if (participant) {
+          remoteStream = remoteStreams[participant.userId] || remoteStreams[participant.socketId] || null;
+        }
+      }
+
+      // As a final fallback, scan all remote streams for a screen-like track (monitor or large width).
+      if (!remoteStream) {
+        for (const s of Object.values(remoteStreams)) {
+          try {
+            const vt = s.getVideoTracks();
+            const st = vt.find(t => {
+              const settings = t.getSettings ? t.getSettings() : {};
+              return (settings && (settings.displaySurface === 'monitor' || settings.width > 1280));
+            });
+            if (st) {
+              remoteStream = s;
+              break;
+            }
+          } catch (e) {
+            // ignore broken streams
+          }
+        }
+      }
+
       if (remoteStream) {
         const videoTracks = remoteStream.getVideoTracks();
         // Typically: first track is camera, second is screen (or vice versa)
         // We can identify screen share track by checking track settings
         const screenTrack = videoTracks.find(t => {
-          const settings = t.getSettings();
-          // Screen shares typically have different aspect ratios or larger dimensions
-          return settings.width > 1280 || settings.displaySurface === 'monitor';
+          const settings = t.getSettings ? t.getSettings() : {};
+          return (settings && (settings.width > 1280 || settings.displaySurface === 'monitor'));
         });
         const cameraTrack = videoTracks.find(t => t !== screenTrack);
-        
+
         if (screenTrack) {
           screenStream = new MediaStream([screenTrack]);
           if (remoteStream.getAudioTracks().length > 0) {
-            screenStream.addTrack(remoteStream.getAudioTracks()[0]);
+            try { screenStream.addTrack(remoteStream.getAudioTracks()[0]); } catch (e) {}
           }
         }
         if (cameraTrack) {

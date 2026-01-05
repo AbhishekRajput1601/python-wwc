@@ -1,4 +1,5 @@
 import api from '../utils/api';
+import notify from '../utils/notifications';
 
 const adminService = {
 
@@ -7,6 +8,7 @@ const adminService = {
       const res = await api.get('/admin/users');
       return res.data;
     } catch (err) {
+      notify.error(err.message || 'Failed to fetch users');
       return { success: false, message: err.message };
     }
   },
@@ -23,8 +25,10 @@ const adminService = {
   updateUser: async (userId, payload) => {
     try {
       const res = await api.put(`/admin/users/${userId}`, payload);
+      if (res.data?.message) notify.success(res.data.message);
       return res.data;
     } catch (err) {
+      notify.error(err.message || 'Failed to update user');
       return { success: false, message: err.message };
     }
   },
@@ -32,8 +36,10 @@ const adminService = {
   deleteUser: async (userId) => {
     try {
       const res = await api.delete(`/admin/users/${userId}`);
+      if (res.data?.message) notify.success(res.data.message);
       return res.data;
     } catch (err) {
+      notify.error(err.message || 'Failed to delete user');
       return { success: false, message: err.message };
     }
   },

@@ -324,21 +324,6 @@ const AdminDashboard = () => {
     );
   }
 
-  if ((user?.role || "").toLowerCase() !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-medium p-8 text-center">
-          <h2 className="text-2xl font-bold text-error-700 mb-2">
-            Access Denied
-          </h2>
-          <p className="text-neutral-600">
-            You do not have permission to view this page.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto py-6 sm:py-8 md:py-10 px-3 sm:px-4 md:px-6">
       <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-neutral-900 mb-1.5 sm:mb-2">
