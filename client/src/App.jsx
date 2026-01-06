@@ -1,5 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Navbar from './components/Layout/Navbar'
 import Home from './pages/Home'
@@ -55,6 +57,7 @@ function App() {
     <AuthProvider>
       <Router>
         <InnerApp />
+        <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop={false} closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
       </Router>
     </AuthProvider>
   );

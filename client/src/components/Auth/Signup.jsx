@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import authService from "../../services/authService";
+import { toast } from 'react-toastify';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -55,6 +56,7 @@ const Signup = () => {
       if (resp.success) {
         setStep('verify');
         setCountdown(180);
+        toast.success('Verification code sent to your email');
       } else {
         setError(resp.message || 'Failed to request verification code');
       }
@@ -76,6 +78,7 @@ const Signup = () => {
       const payload = { email: formData.email, otp };
       const resp = await authService.verifyRegistrationOtp(payload);
       if (resp.success) {
+        toast.success('Verification is successfully done');
         dispatch({
           type: 'REGISTER_SUCCESS',
           payload: { token: resp.token, user: resp.user }

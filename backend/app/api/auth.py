@@ -171,7 +171,7 @@ async def request_password_reset(
         user = await auth_service.get_user_by_email(email)
         if not user:
             # Do not reveal whether email exists
-            return {"success": True, "message": "If an account exists, a verification code was sent to the email."}
+            return {"success": True, "message": "Verification code is sent to the email."}
 
         otp_service = OTPService(db)
         otp_code = await otp_service.create_password_reset_otp(email, str(user.get("_id")), ttl_seconds=180)
@@ -186,7 +186,7 @@ async def request_password_reset(
             # mask error
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send verification email")
 
-        return {"success": True, "message": "If an account exists, a verification code was sent to the email."}
+        return {"success": True, "message": "Verification code is sent to the email."}
     except HTTPException:
         raise
     except Exception as e:
