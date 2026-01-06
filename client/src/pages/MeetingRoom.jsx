@@ -26,6 +26,7 @@ const MeetingRoom = () => {
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [hostId, setHostId] = useState(null);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -530,9 +531,11 @@ const MeetingRoom = () => {
         };
         sock.on('caption-update', onCaptionUpdateEarly);
 
+        const userIdToSend = user?._id || user?.id;
+        console.log("[WWC] Joining meeting with user:", { userId: userIdToSend, userName: user?.name, fullUser: user });
         sock.emit("join-meeting", {
           meetingId,
-          userId: user?._id,
+          userId: userIdToSend,
           userName: user?.name || "User",
         });
         (async () => {
@@ -551,6 +554,7 @@ const MeetingRoom = () => {
         });
 
         sock.on("existing-participants", (existing) => {
+          console.log("[WWC] existing-participants received:", existing);
           // dedupe by userId (preferred) falling back to socketId
           const mapped = existing.map(p => ({ ...p }));
           const uniqByUser = Array.from(
@@ -564,6 +568,7 @@ const MeetingRoom = () => {
           });
 
           setParticipants(uniqByUser);
+          console.log("[WWC] participants set to:", uniqByUser);
 
           uniqByUser.forEach((p) => {
             createPeerConnection(p.socketId, localStream, sock, true, p.userId);
@@ -571,6 +576,7 @@ const MeetingRoom = () => {
         });
 
         sock.on("user-joined", (data) => {
+          console.log("[WWC] user-joined received:", data);
           if (data.socketId === sock.id) return;
 
           // remove any existing participant with same userId to prevent duplicates
@@ -701,6 +707,39 @@ const MeetingRoom = () => {
     };
   }, [authLoading, isAuthenticated, meetingId, navigate, user]);
 
+  // Step 2: Seed host ONCE from meeting data
+  useEffect(() => {
+    if (!meeting || hostId) return;
+
+    if (meeting.host) {
+      const id =
+        typeof meeting.host === "string"
+          ? meeting.host
+          : meeting.host._id || meeting.host.id;
+
+      if (id) {
+        console.log("[WWC] Setting hostId from meeting data:", String(id));
+        setHostId(String(id));
+      }
+    }
+  }, [meeting, hostId]);
+
+  // Step 3: Make socket the authority
+  useEffect(() => {
+    if (!socket) return;
+
+    const onHostUpdated = ({ hostId }) => {
+      console.log("[WWC] host-updated event received:", hostId);
+      setHostId(String(hostId));
+    };
+
+    socket.on("host-updated", onHostUpdated);
+
+    return () => {
+      socket.off("host-updated", onHostUpdated);
+    };
+  }, [socket]);
+
   useEffect(() => {
     if (!socket) return;
     const onStart = ({ socketId }) => setRemoteScreenSharerId(socketId);
@@ -775,15 +814,7 @@ const MeetingRoom = () => {
     console.log('[DEBUG] isCreator check:', { userId, hostId, isMatch: hostId && String(hostId) === userId });
     return hostId && String(hostId) === userId;
   })();
-  const hostId = (() => {
-    if (!meeting) return null;
-    if (meeting.host) {
-      if (typeof meeting.host === "string") return meeting.host;
-      if (meeting.host._id) return String(meeting.host._id);
-      return String(meeting.host);
-    }
-    return null;
-  })();
+
 
   const startRecording = () => {
     if (!mediaStream) {

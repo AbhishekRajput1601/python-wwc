@@ -169,17 +169,16 @@ export default function MeetingStage({
   uniqByUser.forEach((p) => {
     const streamKey = p.userId || p.socketId;
     const s = remoteStreams[streamKey] || remoteStreams[p.socketId];
-    if (s) {
-      tiles.push({
-        key: streamKey,
-        stream: s,
-        label: p.userName || "Participant",
-        isLocal: false,
-        userId: p.userId || null,
-        avatarChar: (p.userName && p.userName[0]) || "P",
-        isHost: hostId && String(p.userId || streamKey) === String(hostId),
-      });
-    }
+    // Always add the tile, even if stream is not available yet
+    tiles.push({
+      key: streamKey,
+      stream: s || null,
+      label: p.userName || "Participant",
+      isLocal: false,
+      userId: p.userId || null,
+      avatarChar: (p.userName && p.userName[0]) || "P",
+      isHost: hostId && String(p.userId || streamKey) === String(hostId),
+    });
   });
 
   const activeShareId = isScreenSharing ? "local" : remoteScreenSharerId;
@@ -193,12 +192,42 @@ export default function MeetingStage({
     return 64;
   };
 
-  // Prefer an explicitly marked host tile; fall back to matching ids, then local or first tile
-  let hostTile = tiles.find((t) => t.isHost) ||
-    (hostId ? tiles.find((t) => (t.userId && String(t.userId) === String(hostId)) || String(t.key) === String(hostId)) : null) ||
-    tiles.find((t) => t.isLocal) || tiles[0];
+  // Step 6 & 7: Remove local-user fallback and add virtual host fallback
+  let hostTile = null;
 
-  const others = tiles.filter((t) => t.key !== hostTile.key);
+  if (hostId) {
+    hostTile = tiles.find(
+      (t) =>
+        (t.userId && String(t.userId) === String(hostId)) ||
+        String(t.key) === String(hostId)
+    );
+    
+    // Debug logging to identify mismatch
+    if (!hostTile) {
+      console.log("[WWC] HOST RESOLVE DEBUG", {
+        hostId,
+        tiles: tiles.map(t => ({ key: t.key, userId: t.userId, label: t.label, isLocal: t.isLocal }))
+      });
+    }
+  }
+
+  if (!hostTile) {
+    hostTile = {
+      key: "virtual-host",
+      stream: null,
+      label: "Host",
+      isLocal: false,
+      avatarChar: "H",
+      isHost: true,
+      muted: true,
+      cameraOn: false,
+    };
+  }
+
+  // Step 8: Exclude host from outer ring (including virtual-host)
+  const others = tiles.filter(
+    (t) => t.key !== hostTile.key && t.key !== "virtual-host"
+  );
 
   const tilePx = getTilePixelSize(count);
 
@@ -456,7 +485,7 @@ export default function MeetingStage({
               muted={hostTile.muted}
               cameraOn={hostTile.cameraOn}
             />
-            {/* <div className="mt-2 px-3 py-1 rounded-full bg-wwc-600 text-white text-xs font-semibold">Host</div> */}
+            <div className="mt-2 px-3 py-1 rounded-full bg-wwc-600 text-white text-xs font-semibold">Host</div>
           </div>
         </div>
 

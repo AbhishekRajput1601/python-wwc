@@ -78,14 +78,25 @@ async def join_meeting(sid, data):
     user_id = data.get("userId")
     user_name = data.get("userName", "User")
     
-    logger.info(f"User {user_name} ({user_id}) joining meeting: {meeting_id}")
+    logger.info(f"[WWC] User {user_name} ({user_id}) joining meeting: {meeting_id}")
+    logger.info(f"[WWC] join_meeting data received: {data}")
+    
     # Check meeting status in DB and reject if it has ended
+    # Also fetch host information
+    host_id = None
     try:
         db = get_database()
-        doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"status": 1})
+        doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"status": 1, "host": 1})
         if doc and doc.get("status") == "ended":
             await sio.emit("join-error", {"message": "This meeting has ended."}, to=sid)
             return
+        # Extract host ID
+        if doc and doc.get("host"):
+            host = doc.get("host")
+            if isinstance(host, dict):
+                host_id = str(host.get("_id") or host.get("id"))
+            else:
+                host_id = str(host)
     except Exception:
         logger.exception("Failed to check meeting status for %s", meeting_id)
 
@@ -179,7 +190,12 @@ async def join_meeting(sid, data):
                 "userName": user["name"]
             })
     
+    logger.info(f"[WWC] Sending existing_participants to {sid}: {existing_participants}")
     await sio.emit("existing-participants", existing_participants, to=sid)
+
+    # Emit host information to all participants (including the newly joined one)
+    if host_id:
+        await sio.emit("host-updated", {"hostId": host_id}, room=meeting_id)
 
     # Send last 100 chat messages as history (if meeting doc exists)
     try:
