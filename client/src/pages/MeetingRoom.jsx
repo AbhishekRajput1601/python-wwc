@@ -47,6 +47,7 @@ const MeetingRoom = () => {
   const [socket, setSocket] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [cameraStates, setCameraStates] = useState({});
   const socketIdToUserId = useRef({});
   const peerConnections = useRef({});
   const iceServers = useRef(null);
@@ -104,23 +105,36 @@ const MeetingRoom = () => {
     setIsMuted(newMuted);
   };
   const toggleVideo = () => {
+    const newState = !isVideoOn;
+    
     if (mediaStream) {
       const videoTracks = mediaStream.getVideoTracks();
       if (videoTracks.length > 0) {
         videoTracks.forEach((track) => {
-          track.enabled = !isVideoOn;
+          track.enabled = newState;
         });
       }
 
-      if (!isVideoOn && localVideoRef.current) {
+      if (newState && localVideoRef.current) {
         localVideoRef.current.srcObject = mediaStream;
       }
 
-      if (isVideoOn && localVideoRef.current) {
+      if (!newState && localVideoRef.current) {
         localVideoRef.current.srcObject = null;
       }
     }
-    setIsVideoOn((prev) => !prev);
+    
+    // Broadcast camera state to all participants
+    if (socket) {
+      const userId = user?._id || user?.id;
+      console.log("[WWC] Emitting camera-state-changed:", { userId, isVideoOn: newState });
+      socket.emit("camera-state-changed", {
+        userId: userId,
+        isVideoOn: newState,
+      });
+    }
+    
+    setIsVideoOn(newState);
   };
   const toggleCaptions = () => {
     setShowCaptions((prev) => {
@@ -538,6 +552,15 @@ const MeetingRoom = () => {
           userId: userIdToSend,
           userName: user?.name || "User",
         });
+        
+        // Broadcast initial camera state after joining
+        setTimeout(() => {
+          sock.emit("camera-state-changed", {
+            userId: userIdToSend,
+            isVideoOn: true, // default camera state is on
+          });
+        }, 100);
+        
         (async () => {
           try {
             const res = await meetingService.joinMeeting(meetingId);
@@ -748,6 +771,16 @@ const MeetingRoom = () => {
     socket.on("user-started-screen-share", onStart);
     socket.on("user-stopped-screen-share", onStop);
 
+    const onCameraStateChanged = ({ userId, isVideoOn }) => {
+      console.log("[WWC] camera-state-changed received:", { userId, isVideoOn });
+      setCameraStates(prev => {
+        const updated = { ...prev, [userId]: isVideoOn };
+        console.log("[WWC] Updated cameraStates:", updated);
+        return updated;
+      });
+    };
+    socket.on("camera-state-changed", onCameraStateChanged);
+
     const onCaptionUpdate = (payload) => {
       try {
         // payload: { meetingId, speakerId, speakerName, text, start, end, duration }
@@ -786,6 +819,7 @@ const MeetingRoom = () => {
       socket.off("user-stopped-screen-share", onStop);
       socket.off("meeting-ended", onMeetingEnded);
       socket.off('caption-update', onCaptionUpdate);
+      socket.off("camera-state-changed", onCameraStateChanged);
     };
   }, [socket]);
 
@@ -1163,6 +1197,7 @@ const MeetingRoom = () => {
             user={user}
             isMuted={isMuted}
             isVideoOn={isVideoOn}
+            cameraStates={cameraStates}
           />
 
           <MeetingSidePanel

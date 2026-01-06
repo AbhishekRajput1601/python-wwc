@@ -245,6 +245,30 @@ async def leave_meeting(sid, data):
             del socket_to_user[sid]
 
 
+@sio.on('camera-state-changed')
+async def handle_camera_state_changed(sid, data):
+    """Handle camera state change and broadcast to all participants."""
+    meeting_id = socket_to_meeting.get(sid)
+    if not meeting_id:
+        logger.warning(f"[WWC] camera-state-changed: No meeting found for socket {sid}")
+        return
+    
+    user_id = data.get("userId")
+    is_video_on = data.get("isVideoOn")
+    
+    logger.info(f"[WWC] Camera state changed for user {user_id}: {is_video_on} in meeting {meeting_id}")
+    
+    # Broadcast to all participants in the room (including sender)
+    await sio.emit(
+        "camera-state-changed",
+        {
+            "userId": user_id,
+            "isVideoOn": is_video_on
+        },
+        room=meeting_id
+    )
+
+
 @sio.event
 async def webrtc_offer(sid, data):
     """Handle WebRTC offer."""

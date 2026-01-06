@@ -1,54 +1,37 @@
 import React from "react";
 
-const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participantCount = 1, sizePx, isHost = false, muted = false, cameraOn = undefined }) => {
+const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participantCount = 1, sizePx, isHost = false, muted = false, cameraOn = undefined, userId = null }) => {
   const ref = React.useRef(null);
-  const [hasVideo, setHasVideo] = React.useState(false);
+
+  // Show video only if: camera is not explicitly OFF AND stream exists
+  const hasVideo = cameraOn !== false && !!stream;
+  
+  // Debug log
+  React.useEffect(() => {
+    if (!isLocal) {
+      console.log(`[WWC] VideoTile ${label}:`, { userId, cameraOn, hasStream: !!stream, hasVideo });
+    }
+  }, [cameraOn, hasVideo, stream, isLocal, label, userId]);
 
   React.useEffect(() => {
+    // Only set up video element if we should show video
+    if (!hasVideo || !stream) return;
+    
     const el = ref.current;
     if (el) {
-      el.srcObject = stream || null;
+      el.srcObject = stream;
       // Optimize for low latency
-      if (el.srcObject && !isLocal) {
+      if (!isLocal) {
         el.play().catch(e => console.log('[WWC] Video play error:', e));
       }
     }
 
-    const computeHasVideo = () => {
-      if (!stream) return false;
-      const v = stream.getVideoTracks();
-      if (!v.length) return false;
-      const t = v[0];
-      return t && t.readyState === "live" && t.enabled !== false;
-    };
-
-    const update = () => setHasVideo(computeHasVideo());
-    update();
-
-    if (!stream) return;
-    const onAdd = () => update();
-    const onRemove = () => update();
-    const track = stream.getVideoTracks()[0];
-    const onMute = () => update();
-    const onUnmute = () => update();
-    const onEnded = () => update();
-    stream.addEventListener?.("addtrack", onAdd);
-    stream.addEventListener?.("removetrack", onRemove);
-    track?.addEventListener?.("mute", onMute);
-    track?.addEventListener?.("unmute", onUnmute);
-    track?.addEventListener?.("ended", onEnded);
-
-    const pollInterval = setInterval(() => update(), 400);
-
     return () => {
-      stream.removeEventListener?.("addtrack", onAdd);
-      stream.removeEventListener?.("removetrack", onRemove);
-      track?.removeEventListener?.("mute", onMute);
-      track?.removeEventListener?.("unmute", onUnmute);
-      track?.removeEventListener?.("ended", onEnded);
-      clearInterval(pollInterval);
+      if (el) {
+        el.srcObject = null;
+      }
     };
-  }, [stream, isLocal]);
+  }, [stream, isLocal, hasVideo]);
 
   const getCircleSize = () => {
     if (sizePx) return "";
@@ -81,16 +64,17 @@ const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participa
   return (
     <div className="flex flex-col items-center gap-1 sm:gap-2" style={sizePx ? { width: sizePx } : undefined}>
       <div className={`relative ${getCircleSize()} rounded-full border-2 sm:border-3 md:border-4 ${borderClass} ${ringClass} shadow-lg sm:shadow-xl overflow-hidden flex-shrink-0`} style={circleStyle}>
-        <video 
-          ref={ref} 
-          autoPlay 
-          playsInline 
-          disablePictureInPicture
-          className={`w-full h-full object-cover rounded-full ${hasVideo ? "" : "hidden"}`} 
-          muted={isLocal}
-          style={{ latency: 0 }}
-        />
-        {!hasVideo && (
+        {hasVideo ? (
+          <video 
+            ref={ref} 
+            autoPlay 
+            playsInline 
+            disablePictureInPicture
+            className="w-full h-full object-cover rounded-full" 
+            muted={isLocal}
+            style={{ latency: 0 }}
+          />
+        ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className={`bg-gradient-to-br from-wwc-600 to-wwc-700 w-full h-full rounded-full flex items-center justify-center`}>
               <span className={`text-white font-bold ${getAvatarSize()}`} style={avatarStyle}>
@@ -99,7 +83,6 @@ const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participa
             </div>
           </div>
         )}
-        {/* (No overlay here) */}
       </div>
       <div className={`bg-white/90 text-neutral-900 ${getLabelSize()} rounded-lg font-semibold shadow whitespace-nowrap`}>
         {label}
@@ -124,6 +107,7 @@ export default function MeetingStage({
   user,
   isMuted,
   isVideoOn,
+  cameraStates = {},
 }) {
   const stageRef = React.useRef(null);
   const [stageSize, setStageSize] = React.useState({ w: 800, h: 600 });
@@ -178,6 +162,8 @@ export default function MeetingStage({
       userId: p.userId || null,
       avatarChar: (p.userName && p.userName[0]) || "P",
       isHost: hostId && String(p.userId || streamKey) === String(hostId),
+      // Default to true (camera on) if state is unknown
+      cameraOn: p.userId ? (cameraStates[p.userId] !== false) : true,
     });
   });
 
@@ -405,6 +391,7 @@ export default function MeetingStage({
             isHost={true}
             muted={hostTile.muted}
             cameraOn={hostTile.cameraOn}
+            userId={hostTile.userId}
           />
           <div className="mt-1 px-2 py-0.5 rounded-full bg-wwc-600 text-white text-[10px] font-semibold">Host</div>
         </div>
@@ -421,6 +408,7 @@ export default function MeetingStage({
               sizePx={null}
               muted={tile.muted}
               cameraOn={tile.cameraOn}
+              userId={tile.userId}
             />
           </div>
         ))}
@@ -484,6 +472,7 @@ export default function MeetingStage({
               isHost={true}
               muted={hostTile.muted}
               cameraOn={hostTile.cameraOn}
+              userId={hostTile.userId}
             />
             <div className="mt-2 px-3 py-1 rounded-full bg-wwc-600 text-white text-xs font-semibold">Host</div>
           </div>
@@ -494,7 +483,7 @@ export default function MeetingStage({
           if (!tile) return null;
           return (
             <div key={tile.key} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: 30 }}>
-                  <VideoTile stream={tile.stream} label={tile.label} isLocal={tile.isLocal} avatarChar={tile.avatarChar} participantCount={count} sizePx={tilePx} muted={tile.muted} cameraOn={tile.cameraOn} />
+                  <VideoTile stream={tile.stream} label={tile.label} isLocal={tile.isLocal} avatarChar={tile.avatarChar} participantCount={count} sizePx={tilePx} muted={tile.muted} cameraOn={tile.cameraOn} userId={tile.userId} />
             </div>
           );
         })}
