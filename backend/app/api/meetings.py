@@ -227,10 +227,15 @@ async def add_user_in_meeting(
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
-    # Only host or admin can add users
+    # Do not allow adding users to an ended meeting
+    if meeting.get("status") == "ended":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This meeting has ended.")
+
+    # Allow a user to add themselves (join) even if they are not the host.
+    # For adding other users, only the host is allowed.
     host_id = _host_id_from_meeting(meeting)
     is_host = host_id == user_id
-    if not is_host:
+    if str(target_user) != str(user_id) and not is_host:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add users to this meeting")
 
     updated = await meeting_service.add_user_in_meeting(meeting_id, target_user)

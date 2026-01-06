@@ -156,6 +156,7 @@ export default function MeetingStage({
     avatarChar: user?.name?.[0] || "U",
     muted: typeof isMuted !== 'undefined' ? isMuted : false,
     cameraOn: typeof isVideoOn !== 'undefined' ? isVideoOn : undefined,
+    isHost: hostId && String(user?._id || user?.id) === String(hostId),
   });
 
   const uniqueParticipants = Array.from(new Map(participants.map((p) => [p.socketId, p])).values()).filter(
@@ -176,6 +177,7 @@ export default function MeetingStage({
         isLocal: false,
         userId: p.userId || null,
         avatarChar: (p.userName && p.userName[0]) || "P",
+        isHost: hostId && String(p.userId || streamKey) === String(hostId),
       });
     }
   });
@@ -191,31 +193,10 @@ export default function MeetingStage({
     return 64;
   };
 
-  let hostTile = null;
-  if (hostId) {
- 
-    hostTile = tiles.find((t) => t.userId && String(t.userId) === String(hostId));
-
-    if (!hostTile) {
-      hostTile = tiles.find((t) => String(t.key) === String(hostId));
-    }
-
-    // As an additional fallback, check participants list for a matching userId or socketId
-    if (!hostTile && Array.isArray(participants) && participants.length) {
-      const hostParticipant = participants.find((p) => (p.userId && String(p.userId) === String(hostId)) || (p.socketId && String(p.socketId) === String(hostId)));
-      if (hostParticipant && hostParticipant.socketId) {
-        hostTile = tiles.find((t) => t.key === hostParticipant.socketId) || hostTile;
-      }
-    }
-  }
-
-  if (!hostTile) {
-    if (!hostId) {
-      hostTile = tiles.find((t) => t.isLocal) || tiles[0];
-    } else {
-      hostTile = tiles.find((t) => !t.isLocal) || tiles.find((t) => t.isLocal) || tiles[0];
-    }
-  }
+  // Prefer an explicitly marked host tile; fall back to matching ids, then local or first tile
+  let hostTile = tiles.find((t) => t.isHost) ||
+    (hostId ? tiles.find((t) => (t.userId && String(t.userId) === String(hostId)) || String(t.key) === String(hostId)) : null) ||
+    tiles.find((t) => t.isLocal) || tiles[0];
 
   const others = tiles.filter((t) => t.key !== hostTile.key);
 
@@ -234,15 +215,17 @@ export default function MeetingStage({
     const cy = h / 2;
 
     // Enforce a strict minimum center-to-center distance to avoid collisions
-    const MIN_DISTANCE = tilePx * 1.25;
-    const RING_GAP = tilePx * 1.6;
+    // Further reduced multipliers to bring participant circles closer to the host
+    const MIN_DISTANCE = tilePx * 0.85;
+    const RING_GAP = tilePx * 0.9;
 
     let ringIndex = 1;
     let placed = 0;
     const result = [];
 
     while (placed < others.length) {
-      const radius = ringIndex * RING_GAP + tilePx;
+      // Use a smaller base offset so the first ring sits much closer to the host
+      const radius = ringIndex * RING_GAP + tilePx * 0.5;
       const circumference = 2 * Math.PI * radius;
 
       // hard cap per ring based on MIN_DISTANCE
@@ -473,7 +456,7 @@ export default function MeetingStage({
               muted={hostTile.muted}
               cameraOn={hostTile.cameraOn}
             />
-            <div className="mt-2 px-3 py-1 rounded-full bg-wwc-600 text-white text-xs font-semibold">Host</div>
+            {/* <div className="mt-2 px-3 py-1 rounded-full bg-wwc-600 text-white text-xs font-semibold">Host</div> */}
           </div>
         </div>
 
