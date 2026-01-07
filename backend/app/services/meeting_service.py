@@ -431,7 +431,42 @@ class MeetingService:
         if not meeting:
             return []
         recs = meeting.get("recordings", [])
-        return [r for r in recs if r.get("uploaded_by") == user_id]
+        filtered_recs = [r for r in recs if r.get("uploaded_by") == user_id]
+        
+        # Serialize recordings with proper field names
+        def _fmt(dt):
+            if not dt:
+                return None
+            try:
+                if dt.tzinfo is None:
+                    return dt.isoformat() + "Z"
+                return dt.isoformat()
+            except Exception:
+                try:
+                    return dt.isoformat()
+                except Exception:
+                    return None
+        
+        def _serialize_recording(rec: dict) -> dict:
+            return {
+                "_id": rec.get("id"),
+                "id": rec.get("id"),
+                "publicId": rec.get("public_id"),
+                "public_id": rec.get("public_id"),
+                "urlHigh": rec.get("url_high"),
+                "url_high": rec.get("url_high"),
+                "urlLow": rec.get("url_low"),
+                "url_low": rec.get("url_low"),
+                "duration": rec.get("duration"),
+                "bytes": rec.get("bytes"),
+                "uploadedAt": _fmt(rec.get("uploaded_at")),
+                "uploaded_at": _fmt(rec.get("uploaded_at")),
+                "uploadedBy": rec.get("uploaded_by"),
+                "uploaded_by": rec.get("uploaded_by"),
+                "status": rec.get("status")
+            }
+        
+        return [_serialize_recording(r) for r in filtered_recs]
 
     async def get_recording_by_id(self, meeting_id: str, recording_id: str) -> Optional[dict]:
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
@@ -506,6 +541,29 @@ class MeetingService:
                     return dt.isoformat()
                 except Exception:
                     return None
+        
+        def _serialize_recording(rec: dict) -> dict:
+            """Serialize recording with camelCase field names."""
+            return {
+                "_id": rec.get("id"),
+                "id": rec.get("id"),
+                "publicId": rec.get("public_id"),
+                "public_id": rec.get("public_id"),
+                "urlHigh": rec.get("url_high"),
+                "url_high": rec.get("url_high"),
+                "urlLow": rec.get("url_low"),
+                "url_low": rec.get("url_low"),
+                "duration": rec.get("duration"),
+                "bytes": rec.get("bytes"),
+                "uploadedAt": _fmt(rec.get("uploaded_at")),
+                "uploaded_at": _fmt(rec.get("uploaded_at")),
+                "uploadedBy": rec.get("uploaded_by"),
+                "uploaded_by": rec.get("uploaded_by"),
+                "status": rec.get("status")
+            }
+
+        recordings = meeting.get("recordings", [])
+        serialized_recordings = [_serialize_recording(r) for r in recordings]
 
         return {
             "id": str(meeting["_id"]),
@@ -517,7 +575,7 @@ class MeetingService:
             "participants": meeting.get("participants", []),
             "status": meeting["status"],
             "settings": meeting.get("settings", {}),
-            "recordings": meeting.get("recordings", []),
+            "recordings": serialized_recordings,
             "startTime": _fmt(meeting.get("start_time")),
             "start_time": _fmt(meeting.get("start_time")),
             "endTime": _fmt(meeting.get("end_time")),

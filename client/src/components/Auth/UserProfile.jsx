@@ -583,7 +583,9 @@ const UserProfile = () => {
                             onClick={() => setSelectedRecording(r)}
                           >
                             <div className="text-xs sm:text-sm font-medium text-neutral-900">
-                              {new Date(r.uploadedAt).toLocaleString()}
+                              {r.uploadedAt && !isNaN(new Date(r.uploadedAt).getTime())
+                                ? new Date(r.uploadedAt).toLocaleString()
+                                : "—"}
                             </div>
                             <div className="text-[10px] sm:text-xs text-neutral-500">
                               {r.bytes
