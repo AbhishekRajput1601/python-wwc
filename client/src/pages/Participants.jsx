@@ -34,7 +34,6 @@ const AllUsers = ({ user, isMuted, participants, onClose, loading = false }) => 
             </div>
             <div className="min-w-0">
               <p className="font-medium text-neutral-900 text-sm sm:text-base truncate">{user?.name || "You"}</p>
-              <p className="text-[10px] sm:text-xs text-wwc-600 font-medium">Host</p>
             </div>
           </div>
           <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
@@ -66,7 +65,6 @@ const AllUsers = ({ user, isMuted, participants, onClose, loading = false }) => 
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-neutral-900 text-sm sm:text-base truncate">{p.userName}</p>
-                  <p className="text-[10px] sm:text-xs text-neutral-500 font-medium">Guest</p>
                 </div>
               </div>
 

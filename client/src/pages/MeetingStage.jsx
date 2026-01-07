@@ -224,45 +224,82 @@ export default function MeetingStage({
     return (h * Math.PI) / 180;
   };
 
+  // Cache positions by participant key to prevent reshuffling on screen share toggle
+  const positionMapRef = React.useRef(new Map());
+  const lastParticipantSetRef = React.useRef("");
+  const lastLayoutRef = React.useRef({ stageSize: null, tilePx: null });
+
   const positions = React.useMemo(() => {
-    const { w, h } = stageSize;
-    const cx = w / 2;
-    const cy = h / 2;
+    const currentParticipantSet = others.map((t) => t.key).sort().join("|");
+    const sizeValid = stageSize && stageSize.w > 0 && stageSize.h > 0;
+    const prevStage = lastLayoutRef.current.stageSize;
+    const prevValid = prevStage && prevStage.w > 0 && prevStage.h > 0;
 
-    // Enforce a strict minimum center-to-center distance to avoid collisions
-    // Further reduced multipliers to bring participant circles closer to the host
-    const MIN_DISTANCE = tilePx * 0.85;
-    const RING_GAP = tilePx * 0.9;
-
-    let ringIndex = 1;
-    let placed = 0;
-    const result = [];
-
-    while (placed < others.length) {
-      // Use a smaller base offset so the first ring sits much closer to the host
-      const radius = ringIndex * RING_GAP + tilePx * 0.5;
-      const circumference = 2 * Math.PI * radius;
-
-      // hard cap per ring based on MIN_DISTANCE
-      const maxInRing = Math.max(1, Math.floor(circumference / MIN_DISTANCE));
-      const count = Math.min(maxInRing, others.length - placed);
-
-      for (let i = 0; i < count; i++) {
-        const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; // slight deterministic offset
-
-        const x = cx + Math.cos(angle) * radius - tilePx / 2;
-        const y = cy + Math.sin(angle) * radius - tilePx / 2;
-
-        result.push({ key: others[placed].key, left: x, top: y });
-        placed++;
-      }
-
-      ringIndex++;
-      // safety to avoid infinite loops
-      if (ringIndex > 100) break;
+    // Only treat layout as changed when the new size is valid (ignore transient 0x0 sizes)
+    let layoutChanged = false;
+    if (sizeValid) {
+      layoutChanged = !prevStage || prevStage.w !== stageSize.w || prevStage.h !== stageSize.h || lastLayoutRef.current.tilePx !== tilePx;
+    } else {
+      // If new size is invalid (0,0), ignore layout changes to avoid transient recompute
+      layoutChanged = false;
     }
 
-    return result;
+    const participantsChanged = currentParticipantSet !== lastParticipantSetRef.current;
+
+    // Debugging: log when we recompute vs use cache
+    if (participantsChanged || layoutChanged) {
+      console.debug('[WWC] positions recompute', { participantsChanged, layoutChanged, currentParticipantSet, lastParticipantSet: lastParticipantSetRef.current, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
+      lastParticipantSetRef.current = currentParticipantSet;
+      lastLayoutRef.current = { stageSize: { ...stageSize }, tilePx };
+
+      const { w, h } = stageSize;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      // Enforce a strict minimum center-to-center distance to avoid collisions
+      // Further reduced multipliers to bring participant circles closer to the host
+      const MIN_DISTANCE = tilePx * 0.85;
+      const RING_GAP = tilePx * 0.9;
+
+      // Sort others by key to ensure consistent positioning regardless of array order
+      const sortedOthers = [...others].sort((a, b) => a.key.localeCompare(b.key));
+      
+      let ringIndex = 1;
+      let placed = 0;
+      positionMapRef.current.clear();
+
+      while (placed < sortedOthers.length) {
+        // Use a smaller base offset so the first ring sits much closer to the host
+        const radius = ringIndex * RING_GAP + tilePx * 0.5;
+        const circumference = 2 * Math.PI * radius;
+
+        // hard cap per ring based on MIN_DISTANCE
+        const maxInRing = Math.max(1, Math.floor(circumference / MIN_DISTANCE));
+        const count = Math.min(maxInRing, sortedOthers.length - placed);
+
+        for (let i = 0; i < count; i++) {
+          const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; // slight deterministic offset
+
+          const x = cx + Math.cos(angle) * radius - tilePx / 2;
+          const y = cy + Math.sin(angle) * radius - tilePx / 2;
+
+          positionMapRef.current.set(sortedOthers[placed].key, { left: x, top: y });
+          placed++;
+        }
+
+        ringIndex++;
+        // safety to avoid infinite loops
+        if (ringIndex > 100) break;
+      }
+    } else {
+      console.debug('[WWC] positions cached used', { currentParticipantSet, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
+    }
+
+    // Return positions in the order of current others array, using cached map
+    return others.map(t => ({
+      key: t.key,
+      ...(positionMapRef.current.get(t.key) || { left: 0, top: 0 })
+    }));
   }, [others, stageSize, tilePx]);
 
   if (activeShareId) {
