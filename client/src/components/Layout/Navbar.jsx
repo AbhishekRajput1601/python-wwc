@@ -40,12 +40,20 @@ const Navbar = () => {
             {isAuthenticated ? (
               <>
                 {user?.name === "admin" ? (
-                  <Link
-                    to="/admin-dashboard"
-                    className="text-neutral-600 hover:text-wwc-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-200 hover:bg-wwc-50"
-                  >
-                    Admin Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/dashboard"
+                      className="text-neutral-600 hover:text-wwc-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-200 hover:bg-wwc-50"
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/admin-dashboard"
+                      className="text-neutral-600 hover:text-wwc-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-200 hover:bg-wwc-50"
+                    >
+                      Admin Dashboard
+                    </Link>
+                  </>
                 ) : (
                   <Link
                     to="/dashboard"
@@ -161,21 +169,21 @@ const Navbar = () => {
                     </span>
                   </div>
                   
-                  {user?.name === "admin" ? (
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-lg text-sm font-semibold text-neutral-600 hover:text-wwc-600 hover:bg-wwc-50 transition-colors duration-200"
+                  >
+                    Dashboard
+                  </Link>
+
+                  {user?.name === "admin" && (
                     <Link
                       to="/admin-dashboard"
                       onClick={() => setMobileMenuOpen(false)}
                       className="block px-3 py-2 rounded-lg text-sm font-semibold text-neutral-600 hover:text-wwc-600 hover:bg-wwc-50 transition-colors duration-200"
                     >
                       Admin Dashboard
-                    </Link>
-                  ) : (
-                    <Link
-                      to="/dashboard"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 rounded-lg text-sm font-semibold text-neutral-600 hover:text-wwc-600 hover:bg-wwc-50 transition-colors duration-200"
-                    >
-                      Dashboard
                     </Link>
                   )}
 

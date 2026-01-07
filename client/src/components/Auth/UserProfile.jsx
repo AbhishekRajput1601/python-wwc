@@ -105,12 +105,20 @@ const UserProfile = () => {
       return hostVal && hostVal.toString() === (userId && userId.toString());
     }).length;
 
-    const joinedMeetings = meetings.filter((m) =>
-      (m.participants || []).some((p) => {
+    const joinedMeetings = meetings.filter((m) => {
+      // Check if user is the host
+      const hostVal = m.host ? (typeof m.host === "string" ? m.host : m.host.id || m.host._id || m.host) : null;
+      const isHost = hostVal && hostVal.toString() === (userId && userId.toString());
+      
+      // If user is host, don't count in joined meetings
+      if (isHost) return false;
+      
+      // Count only if user is a participant and not the host
+      return (m.participants || []).some((p) => {
         const pid = p.user_id || p.user || p.id || p._id;
         return pid && pid.toString() === (userId && userId.toString());
-      })
-    ).length;
+      });
+    }).length;
 
     const lastDays = [];
     const today = new Date();
