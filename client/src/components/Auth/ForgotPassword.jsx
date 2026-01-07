@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import authService from '../../services/authService';
 
 const ForgotPassword = () => {
-  const [step, setStep] = useState('request'); // request | reset
+  const [step, setStep] = useState('request'); 
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');

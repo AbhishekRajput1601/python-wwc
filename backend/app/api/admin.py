@@ -24,7 +24,7 @@ async def update_preferences(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Update current user's preferences."""
+ 
     auth_service = AuthService(db)
     updated = await auth_service.update_user(user_id, {"preferences": preferences})
     if not updated:
@@ -46,7 +46,7 @@ async def get_all_users(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Return all users (admin only)."""
+   
     await _ensure_admin(current_user_id, db)
     auth_service = AuthService(db)
     users = await auth_service.get_users(skip=0, limit=1000)
@@ -74,7 +74,7 @@ async def get_all_users_meetings(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Return each user with their meetings (admin only)."""
+ 
     await _ensure_admin(current_user_id, db)
     auth_service = AuthService(db)
     meeting_service = MeetingService(db)
@@ -94,7 +94,7 @@ async def get_all_meetings_with_users(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Return all meetings with host and participant user info (admin only)."""
+
     await _ensure_admin(current_user_id, db)
 
     meetings = await db["meetings"].find().to_list(length=1000)
@@ -102,13 +102,13 @@ async def get_all_meetings_with_users(
 
     out = []
     for m in meetings:
-        # Host lookup: support ObjectId or string id
+ 
         host = None
         try:
             host_ref = m.get("host")
             host_doc = None
             if host_ref:
-                # try direct lookup
+                
                 host_doc = await users_coll.find_one({"_id": host_ref})
                 if not host_doc:
                     try:
@@ -119,7 +119,7 @@ async def get_all_meetings_with_users(
             if host_doc:
                 host = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
             else:
-                # If host stored as dict with details, preserve useful keys
+          
                 if isinstance(host_ref, dict):
                     host = {"id": str(host_ref.get("_id") or host_ref.get("id") or ""), "name": host_ref.get("name"), "email": host_ref.get("email")}
                 else:
@@ -181,7 +181,7 @@ async def get_meeting_captions_text(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Return captions text for a meeting (admin only)."""
+ 
     await _ensure_admin(current_user_id, db)
 
     meeting = await db["meetings"].find_one({"meeting_id": meeting_id})

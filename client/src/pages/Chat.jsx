@@ -128,8 +128,6 @@ const Chat = ({ socket: externalSocket, onClose }) => {
   };
 
   const handleDeleteMessage = (id) => {
-    // delete message removed — function kept intentionally empty in case
-    // other code expects it; actual delete UI has been removed.
   };
 
   const goBackToMeeting = () => {

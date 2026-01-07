@@ -22,12 +22,12 @@ class MeetingService:
         self.users_collection = db[USERS_COLLECTION]
     
     async def create_meeting(self, meeting_data: MeetingCreate, host_id: str) -> dict:
-        """Create a new meeting."""
+       
         meeting_id = str(uuid.uuid4())
         
         meeting_dict = {
             "meeting_id": meeting_id,
-            # Maintain backward compatibility with existing unique index on camelCase
+         
             "meetingId": meeting_id,
             "title": meeting_data.title,
             "description": meeting_data.description,
@@ -63,11 +63,11 @@ class MeetingService:
         return self._serialize_meeting(meeting_dict)
     
     async def get_meeting_by_id(self, meeting_id: str) -> Optional[dict]:
-        """Get meeting by meeting_id."""
+        
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         if meeting:
             serialized = self._serialize_meeting(meeting)
-            # enrich host info
+       
             try:
                 host_id = meeting.get("host")
                 host_doc = None
@@ -80,13 +80,11 @@ class MeetingService:
                 if host_doc:
                     serialized["host"] = {"id": str(host_doc["_id"]), "name": host_doc.get("name"), "email": host_doc.get("email")}
                 else:
-                    # preserve any host_info if present
                     if meeting.get("host_info"):
                         serialized["host"] = meeting.get("host_info")
             except Exception:
                 pass
 
-            # enrich participants
             try:
                 participant_details = await self.get_meeting_participants(meeting_id)
                 serialized["participants"] = participant_details
@@ -103,15 +101,14 @@ class MeetingService:
         limit: int = 100,
         status_filter: Optional[str] = None
     ) -> List[dict]:
-        """Get meetings for a user."""
-        # Exclude meetings the user has chosen to hide (stored on user document)
+
         hidden = []
         try:
             user_doc = await self.users_collection.find_one({"_id": ObjectId(user_id)})
             if user_doc:
                 hidden = user_doc.get("hidden_meetings", []) or []
         except Exception:
-            # fallback: try string id lookup
+ 
             try:
                 user_doc = await self.users_collection.find_one({"_id": user_id})
                 if user_doc:
@@ -137,7 +134,6 @@ class MeetingService:
 
         serialized = [self._serialize_meeting(m) for m in meetings]
 
-        # enrich host and participants for each meeting
         for idx, m in enumerate(meetings):
             try:
                 host_id = m.get("host")
@@ -165,7 +161,7 @@ class MeetingService:
         return serialized
     
     async def join_meeting(self, meeting_id: str, user_id: str) -> Optional[dict]:
-        """Join a meeting."""
+        
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         
         if not meeting:
@@ -219,7 +215,7 @@ class MeetingService:
         return self._serialize_meeting(updated_meeting)
     
     async def leave_meeting(self, meeting_id: str, user_id: str) -> bool:
-        """Leave a meeting."""
+       
         result = await self.collection.update_one(
             {"meeting_id": meeting_id, "participants.user": user_id},
             {
@@ -233,7 +229,7 @@ class MeetingService:
         return result.modified_count > 0
     
     async def update_meeting(self, meeting_id: str, meeting_data: MeetingUpdate) -> Optional[dict]:
-        """Update meeting."""
+   
         update_dict = meeting_data.model_dump(exclude_unset=True)
         
         if not update_dict:
@@ -254,7 +250,7 @@ class MeetingService:
         return None
     
     async def end_meeting(self, meeting_id: str) -> Optional[dict]:
-        """End a meeting."""
+     
         result = await self.collection.find_one_and_update(
             {"meeting_id": meeting_id},
             {
@@ -267,8 +263,6 @@ class MeetingService:
         )
         
         if result:
-            # After ending the meeting, gather captions (if any), generate a captions file,
-            # upload it and attach its URL to the meeting document so it appears in user profiles.
             try:
                 from app.services.caption_service import CaptionService
                 db = self.db
@@ -276,7 +270,7 @@ class MeetingService:
                 caps = await caption_service.get_captions(meeting_id)
                 if caps and caps.get("captions"):
                     formatted = caption_service.format_captions(caps.get("captions", []), format="txt")
-                    # persist to temp file and upload via cloudinary helper
+
                     tmp_fd = None
                     tmp_path = None
                     try:
@@ -286,7 +280,6 @@ class MeetingService:
                         with os.fdopen(fd, "w", encoding="utf-8") as f:
                             f.write(formatted)
 
-                        # upload to cloudinary (use 'raw' resource type for text files)
                         from app.core.cloudinary import upload_file as cloudinary_upload_file
                         extra = {"resource_type": "raw", "folder": "captions", "use_filename": True, "unique_filename": True}
                         try:
@@ -312,7 +305,7 @@ class MeetingService:
         return None
 
     async def add_user_in_meeting(self, meeting_id: str, user_id: str) -> Optional[dict]:
-        """Add a user into meeting participants if not already present."""
+    
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         if not meeting:
             return None
@@ -355,7 +348,6 @@ class MeetingService:
 
         await self.collection.update_one({"meeting_id": meeting_id}, {"$push": {"recordings": placeholder}})
 
-        # Persist bytes to a temp file for upload
         tmp_path = None
         try:
             fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(filename)[1] or ".mp4")
@@ -403,7 +395,7 @@ class MeetingService:
 
                 await self.collection.update_one({"meeting_id": meeting_id}, {"$set": update_fields}, array_filters=[{"r.id": rec_id}])
                 updated_meeting = await self.collection.find_one({"meeting_id": meeting_id})
-                # return the recording metadata
+   
                 recs = updated_meeting.get("recordings", [])
                 for r in recs:
                     if r.get("id") == rec_id:
@@ -411,7 +403,7 @@ class MeetingService:
 
         except Exception as exc:
             logging.exception("Failed to upload recording for meeting %s: %s", meeting_id, exc)
-            # mark recording as failed
+           
             try:
                 await self.collection.update_one({"meeting_id": meeting_id}, {"$set": {"recordings.$[r].status": "failed"}}, array_filters=[{"r.id": rec_id}])
             except Exception:
@@ -432,8 +424,7 @@ class MeetingService:
             return []
         recs = meeting.get("recordings", [])
         filtered_recs = [r for r in recs if r.get("uploaded_by") == user_id]
-        
-        # Serialize recordings with proper field names
+
         def _fmt(dt):
             if not dt:
                 return None
@@ -484,12 +475,12 @@ class MeetingService:
         return meeting.get("captions_text")
     
     async def delete_meeting(self, meeting_id: str) -> bool:
-        """Delete a meeting."""
+       
         result = await self.collection.delete_one({"meeting_id": meeting_id})
         return result.deleted_count > 0
     
     async def add_chat_message(self, meeting_id: str, user_id: str, text: str) -> bool:
-        """Add a chat message to a meeting."""
+    
         user = await self.users_collection.find_one({"_id": ObjectId(user_id)})
         
         message = {
@@ -507,7 +498,7 @@ class MeetingService:
         return result.modified_count > 0
     
     async def get_chat_history(self, meeting_id: str, limit: int = 100) -> List[dict]:
-        """Get chat history for a meeting."""
+       
         meeting = await self.collection.find_one(
             {"meeting_id": meeting_id},
             {"messages": {"$slice": -limit}}
@@ -528,7 +519,7 @@ class MeetingService:
         ]
     
     def _serialize_meeting(self, meeting: dict) -> dict:
-        """Serialize meeting for response."""
+       
         def _fmt(dt):
             if not dt:
                 return None
@@ -543,7 +534,7 @@ class MeetingService:
                     return None
         
         def _serialize_recording(rec: dict) -> dict:
-            """Serialize recording with camelCase field names."""
+    
             return {
                 "_id": rec.get("id"),
                 "id": rec.get("id"),
@@ -589,9 +580,9 @@ class MeetingService:
             "created_at": _fmt(meeting.get("created_at"))
         }
 
-    '''get all participants in a meeting '''
+    
     async def get_meeting_participants(self, meeting_id: str) -> List[dict]:
-        """Get all participants in a meeting."""
+
         meeting = await self.collection.find_one({"meeting_id": meeting_id})
         if not meeting:
             return []

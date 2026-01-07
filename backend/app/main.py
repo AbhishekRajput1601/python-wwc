@@ -9,12 +9,11 @@ from app.api import auth, users, meetings, captions, admin
 from app.sockets.socket_manager import sio
 from app.utils.io import set_io
 import logging
-import app.core.cloudinary  # ensure Cloudinary configured on startup
+import app.core.cloudinary
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events."""
 
     await connect_to_mongo()
     logging.info(f"Starting {settings.APP_NAME}")
@@ -47,7 +46,6 @@ socket_app = socketio.ASGIApp(
     socketio_path="socket.io"
 )
 
-# expose the socket.io server to other modules
 set_io(sio)
 
 
@@ -60,7 +58,7 @@ app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
+   
     return {
         "message": f"Welcome to {settings.APP_NAME}",
         "version": "1.0.0",
@@ -70,7 +68,7 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+   
     return {"status": "healthy"}
 
 

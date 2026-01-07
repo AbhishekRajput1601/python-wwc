@@ -123,8 +123,7 @@ const MeetingRoom = () => {
         localVideoRef.current.srcObject = null;
       }
     }
-    
-    // Broadcast camera state to all participants
+ 
     if (socket) {
       const userId = user?._id || user?.id;
       console.log("[WWC] Emitting camera-state-changed:", { userId, isVideoOn: newState });
@@ -156,7 +155,6 @@ const MeetingRoom = () => {
     });
   };
 
-  // Continuous background audio streaming to server (always active when joined)
   useEffect(() => {
     let recorder = null;
     let intervalId = null;
@@ -164,13 +162,13 @@ const MeetingRoom = () => {
     let source = null;
     let processor = null;
 
-    const useWavEncoding = true; // prefer WAV encoding via WebAudio
+    const useWavEncoding = true;
 
     const sendWavBuffer = async (float32Buffer, sampleRate) => {
-      // convert Float32Array to 16-bit PCM WAV
+
       const buffer = encodeWAV(float32Buffer, sampleRate);
       try {
-        // only send while captions are enabled
+ 
         if (showCaptions) {
           console.debug('[WWC] emitting audio-data (wav)', { meetingId, bytes: buffer.length });
           socket.emit('audio-data', {
@@ -187,10 +185,9 @@ const MeetingRoom = () => {
       }
     };
 
-    // Only start streaming audio to server when captions are enabled by the user
     if (mediaStream && socket && showCaptions) {
       try {
-        // Try WebAudio capture + WAV encoding first
+ 
         if (useWavEncoding && (window.AudioContext || window.webkitAudioContext)) {
           try {
             const AC = window.AudioContext || window.webkitAudioContext;
@@ -202,35 +199,35 @@ const MeetingRoom = () => {
               : audioCtx.createJavaScriptNode(bufferSize, 1, 1);
 
             const sampleRate = audioCtx.sampleRate || 48000;
-            // Aggregate into 0.5-2s speech segments; use 1s target
+ 
             const targetSeconds = 1.0;
             const targetSamples = sampleRate * targetSeconds;
             let collected = [];
             let collectedSamples = 0;
             let lastVoice = false;
-            const VAD_THRESHOLD = 0.01; // RMS threshold, tweak if needed
+            const VAD_THRESHOLD = 0.01;
 
             processor.onaudioprocess = (e) => {
               try {
                 const input = e.inputBuffer.getChannelData(0);
-                // copy input to a new Float32Array
+ 
                 const chunk = new Float32Array(input.length);
                 chunk.set(input);
                 collected.push(chunk);
                 collectedSamples += chunk.length;
 
                 if (collectedSamples >= targetSamples) {
-                  // concatenate
+                 
                   const out = new Float32Array(collectedSamples);
                   let offset = 0;
                   for (const c of collected) {
                     out.set(c, offset);
                     offset += c.length;
                   }
-                  // reset
+                
                   collected = [];
                   collectedSamples = 0;
-                  // VAD: compute RMS and send only if likely speech
+      
                   let sum = 0;
                   for (let i = 0; i < out.length; i++) {
                     sum += out[i] * out[i];
@@ -241,7 +238,7 @@ const MeetingRoom = () => {
                     lastVoice = true;
                     sendWavBuffer(out, sampleRate);
                   } else {
-                    // short hangover: if we recently had voice, consider sending small non-voice to finish phrase
+ 
                     if (lastVoice) {
                       sendWavBuffer(out, sampleRate);
                     }
@@ -260,18 +257,16 @@ const MeetingRoom = () => {
           }
         }
 
-        // Always keep a MediaRecorder fallback (with longer timeslice)
         const audioStream = new MediaStream(mediaStream.getAudioTracks());
         const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : undefined);
         recorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : undefined);
-        const timeSlice = 8000; // increased chunk size for better container completeness
-
+        const timeSlice = 8000; 
         recorder.ondataavailable = async (e) => {
           if (!e.data || e.data.size === 0) return;
           try {
             const arrayBuffer = await e.data.arrayBuffer();
             const chunkMime = recorder && recorder.mimeType ? recorder.mimeType : (mimeType || 'audio/webm');
-            // Only send audio while captions are enabled
+ 
             if (showCaptions) {
               console.debug('[WWC] emitting audio-data (chunk)', { meetingId, size: e.data.size, mime: chunkMime });
               socket.emit('audio-data', {
@@ -318,26 +313,24 @@ const MeetingRoom = () => {
     };
   }, [mediaStream, socket, meetingId, user, selectedLanguage, showCaptions]);
 
-  // WAV encoder helpers
+
   const encodeWAV = (samples, sampleRate) => {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(buffer);
+ writeString(view, 0, 'RIFF');
+view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+ view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, samples.length * 2, true);
 
-    /* RIFF identifier */ writeString(view, 0, 'RIFF');
-    /* file length */ view.setUint32(4, 36 + samples.length * 2, true);
-    /* RIFF type */ writeString(view, 8, 'WAVE');
-    /* format chunk identifier */ writeString(view, 12, 'fmt ');
-    /* format chunk length */ view.setUint32(16, 16, true);
-    /* sample format (raw) */ view.setUint16(20, 1, true);
-    /* channel count */ view.setUint16(22, 1, true);
-    /* sample rate */ view.setUint32(24, sampleRate, true);
-    /* byte rate (sampleRate * blockAlign) */ view.setUint32(28, sampleRate * 2, true);
-    /* block align (channel count * bytes per sample) */ view.setUint16(32, 2, true);
-    /* bits per sample */ view.setUint16(34, 16, true);
-    /* data chunk identifier */ writeString(view, 36, 'data');
-    /* data chunk length */ view.setUint32(40, samples.length * 2, true);
-
-    // write the PCM samples
     floatTo16BitPCM(view, 44, samples);
 
     return new Uint8Array(buffer);
@@ -391,16 +384,12 @@ const MeetingRoom = () => {
         screenStreamRef.current = screenStream;
         setIsScreenSharing(true);
 
-        // Add screen track to all peer connections and renegotiate
         const screenTrack = screenStream.getVideoTracks()[0];
         
         for (const [socketId, pc] of Object.entries(peerConnections.current)) {
           if (screenTrack) {
-            // Add the screen track to the peer connection with the main stream
-            // This ensures all tracks are associated with the same stream on remote end
             pc.addTrack(screenTrack, mediaStream);
-            
-            // Trigger renegotiation to send the new track
+
             try {
               const offer = await pc.createOffer({
                 offerToReceiveAudio: true,
@@ -434,8 +423,7 @@ const MeetingRoom = () => {
 
   const stopScreenShare = async () => {
     setIsScreenSharing(false);
-    
-    // Remove screen track from all peer connections and renegotiate
+
     if (screenStreamRef.current) {
       const screenTrack = screenStreamRef.current.getVideoTracks()[0];
       
@@ -447,7 +435,6 @@ const MeetingRoom = () => {
         if (screenSender) {
           pc.removeTrack(screenSender);
           
-          // Trigger renegotiation after removing track
           try {
             const offer = await pc.createOffer({
               offerToReceiveAudio: true,
@@ -525,7 +512,7 @@ const MeetingRoom = () => {
         sock.on("connect", () => {
           console.log('[WWC] socket connected', sock.id);
           setSelfSocketId(sock.id);
-          // HARD reset local state on reconnect to avoid duplicate peers
+  
           Object.values(peerConnections.current).forEach((pc) => pc.close());
           peerConnections.current = {};
           setParticipants([]);
@@ -533,7 +520,6 @@ const MeetingRoom = () => {
           socketIdToUserId.current = {};
         });
 
-        // Caption update handler: register early so we don't miss events
         const onCaptionUpdateEarly = (payload) => {
           try {
             console.log('[WWC] received caption-update', payload);
@@ -552,12 +538,11 @@ const MeetingRoom = () => {
           userId: userIdToSend,
           userName: user?.name || "User",
         });
-        
-        // Broadcast initial camera state after joining
+ 
         setTimeout(() => {
           sock.emit("camera-state-changed", {
             userId: userIdToSend,
-            isVideoOn: true, // default camera state is on
+            isVideoOn: true, 
           });
         }, 100);
         
@@ -578,13 +563,12 @@ const MeetingRoom = () => {
 
         sock.on("existing-participants", (existing) => {
           console.log("[WWC] existing-participants received:", existing);
-          // dedupe by userId (preferred) falling back to socketId
+
           const mapped = existing.map(p => ({ ...p }));
           const uniqByUser = Array.from(
             new Map(mapped.map((p) => [p.userId || p.socketId, p])).values()
           ).filter((p) => p.socketId !== sock.id);
 
-          // map socketId -> userId for later lookups
           uniqByUser.forEach(p => {
             if (p.userId) socketIdToUserId.current[p.socketId] = p.userId;
             else socketIdToUserId.current[p.socketId] = p.socketId;
@@ -602,52 +586,41 @@ const MeetingRoom = () => {
           console.log("[WWC] user-joined received:", data);
           if (data.socketId === sock.id) return;
 
-          // remove any existing participant with same userId to prevent duplicates
           setParticipants((prev) => {
             const filtered = prev.filter(
               (p) => String(p.userId) !== String(data.userId)
             );
             return [...filtered, data];
           });
-
-          // update mapping and create peer
           socketIdToUserId.current[data.socketId] = data.userId || data.socketId;
           createPeerConnection(data.socketId, localStream, sock, false, data.userId);
         });
 
-        // Handle server telling us a user reconnected (refresh case)
         sock.on("user-reconnected", ({ userId, userName, oldSocketId, newSocketId }) => {
           console.log('[WWC] user-reconnected', { userId, oldSocketId, newSocketId });
 
-          // 1) Remove old participant entry
           setParticipants(prev => prev.filter(p => p.socketId !== oldSocketId));
 
-          // 2) Close old peer connection
           if (peerConnections.current[oldSocketId]) {
             try { peerConnections.current[oldSocketId].close(); } catch (e) {}
             delete peerConnections.current[oldSocketId];
           }
 
-          // 3) Remove old streams (both keyed by socketId and userId)
           setRemoteStreams(prev => {
             const copy = { ...prev };
             delete copy[oldSocketId];
             delete copy[userId];
             return copy;
           });
-
-          // 4) Update mapping and add participant for new socket
           socketIdToUserId.current[newSocketId] = userId || newSocketId;
           setParticipants(prev => {
             const filtered = prev.filter(p => String(p.userId) !== String(userId));
             return [...filtered, { socketId: newSocketId, userId, userName }];
           });
 
-          // 5) Create new peer connection for the new socket id
           createPeerConnection(newSocketId, localStream, sock, false, userId);
         });
 
-        // Offer
         sock.on("offer", async ({ offer, fromSocketId }) => {
           if (!peerConnections.current[fromSocketId]) {
             createPeerConnection(fromSocketId, localStream, sock, false);
@@ -730,7 +703,6 @@ const MeetingRoom = () => {
     };
   }, [authLoading, isAuthenticated, meetingId, navigate, user]);
 
-  // Step 2: Seed host ONCE from meeting data
   useEffect(() => {
     if (!meeting || hostId) return;
 
@@ -747,7 +719,6 @@ const MeetingRoom = () => {
     }
   }, [meeting, hostId]);
 
-  // Step 3: Make socket the authority
   useEffect(() => {
     if (!socket) return;
 
@@ -783,7 +754,7 @@ const MeetingRoom = () => {
 
     const onCaptionUpdate = (payload) => {
       try {
-        // payload: { meetingId, speakerId, speakerName, text, start, end, duration }
+    
         const text = payload?.text || payload?.original_text || "";
         setCurrentCaption(text || "");
       } catch (e) {
@@ -1039,7 +1010,6 @@ const MeetingRoom = () => {
 
     pc.ontrack = (event) => {
       console.log('[WWC] Received track:', event.track.kind, event.track.id.substring(0, 8), 'from:', socketId);
-      // Prefer to key streams by userId (if known), fallback to socketId
       const uid = socketIdToUserId.current[socketId] || userId || null;
       const key = uid || socketId;
 

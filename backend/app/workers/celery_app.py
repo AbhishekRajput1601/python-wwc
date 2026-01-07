@@ -18,5 +18,5 @@ celery_app.conf.update(
 
 @celery_app.task
 def example_task():
-    """Example Celery task."""
+   
     return "Task completed"

@@ -24,14 +24,14 @@ class CaptionService:
         )
     
     async def get_captions(self, meeting_id: str) -> Optional[dict]:
-        """Get captions for a meeting."""
+        
         captions = await self.collection.find_one({"meeting_id": meeting_id})
         if captions:
             return self._serialize_captions(captions)
         return None
     
     async def create_captions(self, meeting_id: str) -> dict:
-        """Create captions document for a meeting."""
+      
         captions_dict = {
             "meeting_id": meeting_id,
             "captions": [],
@@ -44,7 +44,7 @@ class CaptionService:
         return self._serialize_captions(captions_dict)
     
     async def add_caption(self, meeting_id: str, caption: CaptionEntryCreate) -> bool:
-        """Add a caption entry to a meeting."""
+    
      
         existing = await self.collection.find_one({"meeting_id": meeting_id})
         
@@ -81,9 +81,9 @@ class CaptionService:
         translate: bool = False,
         mime_type: Optional[str] = None
     ) -> dict:
-        """Transcribe audio using Whisper model."""
+    
         try:
-            # If input is not WAV (based on mime_type), attempt conversion first
+       
             converted_path = None
             try:
                 if mime_type and 'wav' not in mime_type.lower():
@@ -124,7 +124,7 @@ class CaptionService:
                     'captions': captions
                 }
             finally:
-                # cleanup any temp files we created
+            
                 try:
                     if converted_path and os.path.exists(converted_path):
                         os.remove(converted_path)
@@ -145,14 +145,14 @@ class CaptionService:
             }
     
     async def delete_captions(self, meeting_id: str) -> bool:
-        """Delete captions for a meeting."""
+        
         result = await self.collection.delete_one({"meeting_id": meeting_id})
         return result.deleted_count > 0
     
     def format_captions(self, captions: List[dict], format: str = "txt") -> str:
-        """Format captions for download."""
+      
         if format == "txt":
-            # Group captions by speaker and format timestamps nicely
+         
             from datetime import datetime
 
             def fmt_ts(ts):
@@ -163,7 +163,7 @@ class CaptionService:
                         return ts
                     if isinstance(ts, datetime):
                         return ts.strftime("%Y-%m-%d %H:%M:%S")
-                    # fallback: try to convert
+                
                     return str(ts)
                 except Exception:
                     return str(ts)
@@ -176,7 +176,7 @@ class CaptionService:
             parts = []
             for speaker, entries in grouped.items():
                 parts.append(f"=== {speaker} ===")
-                # sort by timestamp if available
+   
                 try:
                     entries_sorted = sorted(entries, key=lambda e: e.get("timestamp") or e.get("start") or 0)
                 except Exception:
@@ -222,7 +222,7 @@ class CaptionService:
             return ""
     
     def _serialize_captions(self, captions: dict) -> dict:
-        """Serialize captions for response."""
+       
         return {
             "id": str(captions["_id"]),
             "meeting_id": captions["meeting_id"],

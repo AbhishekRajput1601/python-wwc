@@ -1,7 +1,7 @@
-"""Socket -> user map utilities."""
+
 from typing import Optional
 
-# simple in-memory map: socket_id -> {id, name}
+
 _socket_user_map: dict[str, dict] = {}
 
 
@@ -9,7 +9,7 @@ def set_socket_user(socket_id: str, user: dict) -> None:
     try:
         _socket_user_map[socket_id] = user
     except Exception:
-        # best-effort, ignore failures
+     
         pass
 
 

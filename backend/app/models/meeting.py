@@ -26,7 +26,7 @@ class Recording(BaseModel):
     bytes: Optional[int] = None
     uploaded_at: Optional[datetime] = None
     uploaded_by: Optional[str] = None
-    status: str = "pending"  # pending, processing, ready, failed
+    status: str = "pending"
 
 
 class ChatMessage(BaseModel):
@@ -58,7 +58,7 @@ class MeetingInDB(MeetingBase):
     meeting_id: str
     host: str
     participants: List[Participant] = []
-    status: str = "scheduled"  # scheduled, active, ended
+    status: str = "scheduled"  
     recordings: List[Recording] = []
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None

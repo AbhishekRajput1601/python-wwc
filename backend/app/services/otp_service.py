@@ -18,7 +18,7 @@ class OTPService:
         self.collection = db[OTPS_COLLECTION]
 
     async def _ensure_indexes(self):
-        # create TTL index on expires_at (expireAfterSeconds=0)
+
         await self.collection.create_index("expires_at", expireAfterSeconds=0)
         await self.collection.create_index("email", unique=False)
 
@@ -43,7 +43,6 @@ class OTPService:
             "expires_at": now + timedelta(seconds=ttl_seconds),
         }
 
-        # Remove any previous OTPs for email
         await self.collection.delete_many({"email": email})
         await self.collection.insert_one(doc)
 
@@ -51,7 +50,7 @@ class OTPService:
         return otp
 
     async def create_password_reset_otp(self, email: str, user_id: str, ttl_seconds: int = 180) -> str:
-        """Create an OTP for password reset tied to a user_id."""
+       
         await self._ensure_indexes()
 
         otp = self._generate_otp()
@@ -67,7 +66,6 @@ class OTPService:
             "expires_at": now + timedelta(seconds=ttl_seconds),
         }
 
-        # Remove any previous OTPs for email and purpose
         await self.collection.delete_many({"email": email, "purpose": "password_reset"})
         await self.collection.insert_one(doc)
 
@@ -75,7 +73,7 @@ class OTPService:
         return otp
 
     async def verify_password_reset_otp(self, email: str, otp: str) -> dict | None:
-        """Verify an OTP for password reset. Returns dict with user_id on success."""
+        
         doc = await self.collection.find_one({"email": email, "purpose": "password_reset"})
         if not doc:
             return None
@@ -92,7 +90,6 @@ class OTPService:
         if not bcrypt.verify(otp, otp_hash):
             return None
 
-        # success: remove OTP and return stored payload
         await self.collection.delete_many({"email": email, "purpose": "password_reset"})
         return {"email": doc.get("email"), "user_id": doc.get("user_id")}
 
@@ -103,7 +100,7 @@ class OTPService:
 
         expires_at = doc.get("expires_at")
         if not expires_at or datetime.utcnow() > expires_at:
-            # expired or invalid
+         
             await self.collection.delete_many({"email": email})
             return None
 
@@ -114,7 +111,6 @@ class OTPService:
         if not bcrypt.verify(otp, otp_hash):
             return None
 
-        # success: remove OTP and return stored user payload
         await self.collection.delete_many({"email": email})
         return {
             "email": doc.get("email"),

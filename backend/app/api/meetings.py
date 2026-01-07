@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 def _host_id_from_meeting(meeting: dict) -> Optional[str]:
-    """Return host id as string whether meeting['host'] is a dict or a raw id."""
+
     if not meeting:
         return None
     host = meeting.get("host")
@@ -86,7 +86,7 @@ async def join_meeting(
 ):
 
     meeting_service = MeetingService(db)
-    # validate meeting exists and is not ended before joining
+   
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
@@ -96,7 +96,7 @@ async def join_meeting(
 
     meeting = await meeting_service.join_meeting(meeting_id, user_id)
     if not meeting:
-        # fallback: if join failed for unexpected reason
+    
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to join meeting")
     
     return {
@@ -171,11 +171,11 @@ async def end_meeting(
         )
     
     ended_meeting = await meeting_service.end_meeting(meeting_id)
-    # Notify connected participants via socket that meeting has ended
+   
     try:
         await sio.emit("meeting-ended", {"meetingId": meeting_id, "reason": "ended_by_host"}, room=meeting_id)
     except Exception:
-        # don't fail the API if socket emission fails
+    
         pass
 
     return {
@@ -223,7 +223,7 @@ async def add_user_in_meeting(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Add a user into a meeting. Expects JSON: {"meetingId": "...", "userId": "..."}"""
+
     meeting_id = payload.get("meetingId") or payload.get("meeting_id")
     target_user = payload.get("userId") or payload.get("user_id")
     if not meeting_id or not target_user:
@@ -234,12 +234,9 @@ async def add_user_in_meeting(
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
-    # Do not allow adding users to an ended meeting
     if meeting.get("status") == "ended":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This meeting has ended.")
 
-    # Allow a user to add themselves (join) even if they are not the host.
-    # For adding other users, only the host is allowed.
     host_id = _host_id_from_meeting(meeting)
     is_host = host_id == user_id
     if str(target_user) != str(user_id) and not is_host:
@@ -263,7 +260,7 @@ async def upload_recording(
 ):
     meeting_service = MeetingService(db)
 
-    # Authorization check: host or participant or admin
+   
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
@@ -271,7 +268,7 @@ async def upload_recording(
     is_host = host_id == user_id
     participants = meeting.get("participants", [])
     is_participant = any((p.get("user") == user_id) for p in participants)
-    # note: admin role check can be done in security dependency if available
+    
 
     if not (is_host or is_participant):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to upload recordings for this meeting")
@@ -308,7 +305,7 @@ async def get_recording(
     if not rec:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
 
-    # ensure owner
+  
     if rec.get("uploaded_by") != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this recording")
 
@@ -321,7 +318,7 @@ async def get_meeting_captions(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get captions for a meeting as JSON."""
+    
     meeting_service = MeetingService(db)
     meeting = await meeting_service.get_meeting_by_id(meeting_id)
     if not meeting:
@@ -404,7 +401,7 @@ async def get_chat_history(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get chat history for a meeting."""
+    
     meeting_service = MeetingService(db)
     messages = await meeting_service.get_chat_history(meeting_id, limit)
     

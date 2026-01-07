@@ -1,4 +1,4 @@
-"""Simple IO holder for the Socket.IO server instance."""
+
 from typing import Optional
 
 _io_instance = None

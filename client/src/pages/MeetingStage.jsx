@@ -3,10 +3,8 @@ import React from "react";
 const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participantCount = 1, sizePx, isHost = false, muted = false, cameraOn = undefined, userId = null }) => {
   const ref = React.useRef(null);
 
-  // Show video only if: camera is not explicitly OFF AND stream exists
   const hasVideo = cameraOn !== false && !!stream;
-  
-  // Debug log
+
   React.useEffect(() => {
     if (!isLocal) {
       console.log(`[WWC] VideoTile ${label}:`, { userId, cameraOn, hasStream: !!stream, hasVideo });
@@ -14,13 +12,13 @@ const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participa
   }, [cameraOn, hasVideo, stream, isLocal, label, userId]);
 
   React.useEffect(() => {
-    // Only set up video element if we should show video
+
     if (!hasVideo || !stream) return;
     
     const el = ref.current;
     if (el) {
       el.srcObject = stream;
-      // Optimize for low latency
+  
       if (!isLocal) {
         el.play().catch(e => console.log('[WWC] Video play error:', e));
       }
@@ -146,14 +144,14 @@ export default function MeetingStage({
   const uniqueParticipants = Array.from(new Map(participants.map((p) => [p.socketId, p])).values()).filter(
     (p) => p.socketId !== selfSocketId && p.socketId !== socket?.id
   );
-  // Deduplicate by userId where possible and prefer userId as key for streams
+
   const uniqByUser = Array.from(new Map(participants.map((p) => [p.userId || p.socketId, p])).values()).filter(
     (p) => p.socketId !== selfSocketId && p.socketId !== socket?.id
   );
   uniqByUser.forEach((p) => {
     const streamKey = p.userId || p.socketId;
     const s = remoteStreams[streamKey] || remoteStreams[p.socketId];
-    // Always add the tile, even if stream is not available yet
+
     tiles.push({
       key: streamKey,
       stream: s || null,
@@ -162,7 +160,7 @@ export default function MeetingStage({
       userId: p.userId || null,
       avatarChar: (p.userName && p.userName[0]) || "P",
       isHost: hostId && String(p.userId || streamKey) === String(hostId),
-      // Default to true (camera on) if state is unknown
+
       cameraOn: p.userId ? (cameraStates[p.userId] !== false) : true,
     });
   });
@@ -178,7 +176,6 @@ export default function MeetingStage({
     return 64;
   };
 
-  // Step 6 & 7: Remove local-user fallback and add virtual host fallback
   let hostTile = null;
 
   if (hostId) {
@@ -187,8 +184,7 @@ export default function MeetingStage({
         (t.userId && String(t.userId) === String(hostId)) ||
         String(t.key) === String(hostId)
     );
-    
-    // Debug logging to identify mismatch
+ 
     if (!hostTile) {
       console.log("[WWC] HOST RESOLVE DEBUG", {
         hostId,
@@ -210,7 +206,6 @@ export default function MeetingStage({
     };
   }
 
-  // Step 8: Exclude host from outer ring (including virtual-host)
   const others = tiles.filter(
     (t) => t.key !== hostTile.key && t.key !== "virtual-host"
   );
@@ -224,7 +219,6 @@ export default function MeetingStage({
     return (h * Math.PI) / 180;
   };
 
-  // Cache positions by participant key to prevent reshuffling on screen share toggle
   const positionMapRef = React.useRef(new Map());
   const lastParticipantSetRef = React.useRef("");
   const lastLayoutRef = React.useRef({ stageSize: null, tilePx: null });
@@ -235,18 +229,15 @@ export default function MeetingStage({
     const prevStage = lastLayoutRef.current.stageSize;
     const prevValid = prevStage && prevStage.w > 0 && prevStage.h > 0;
 
-    // Only treat layout as changed when the new size is valid (ignore transient 0x0 sizes)
     let layoutChanged = false;
     if (sizeValid) {
       layoutChanged = !prevStage || prevStage.w !== stageSize.w || prevStage.h !== stageSize.h || lastLayoutRef.current.tilePx !== tilePx;
     } else {
-      // If new size is invalid (0,0), ignore layout changes to avoid transient recompute
       layoutChanged = false;
     }
 
     const participantsChanged = currentParticipantSet !== lastParticipantSetRef.current;
 
-    // Debugging: log when we recompute vs use cache
     if (participantsChanged || layoutChanged) {
       console.debug('[WWC] positions recompute', { participantsChanged, layoutChanged, currentParticipantSet, lastParticipantSet: lastParticipantSetRef.current, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
       lastParticipantSetRef.current = currentParticipantSet;
@@ -256,12 +247,9 @@ export default function MeetingStage({
       const cx = w / 2;
       const cy = h / 2;
 
-      // Enforce a strict minimum center-to-center distance to avoid collisions
-      // Further reduced multipliers to bring participant circles closer to the host
       const MIN_DISTANCE = tilePx * 0.85;
       const RING_GAP = tilePx * 0.9;
 
-      // Sort others by key to ensure consistent positioning regardless of array order
       const sortedOthers = [...others].sort((a, b) => a.key.localeCompare(b.key));
       
       let ringIndex = 1;
@@ -269,16 +257,15 @@ export default function MeetingStage({
       positionMapRef.current.clear();
 
       while (placed < sortedOthers.length) {
-        // Use a smaller base offset so the first ring sits much closer to the host
+ 
         const radius = ringIndex * RING_GAP + tilePx * 0.5;
         const circumference = 2 * Math.PI * radius;
 
-        // hard cap per ring based on MIN_DISTANCE
         const maxInRing = Math.max(1, Math.floor(circumference / MIN_DISTANCE));
         const count = Math.min(maxInRing, sortedOthers.length - placed);
 
         for (let i = 0; i < count; i++) {
-          const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; // slight deterministic offset
+          const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; 
 
           const x = cx + Math.cos(angle) * radius - tilePx / 2;
           const y = cy + Math.sin(angle) * radius - tilePx / 2;
@@ -288,14 +275,13 @@ export default function MeetingStage({
         }
 
         ringIndex++;
-        // safety to avoid infinite loops
+    
         if (ringIndex > 100) break;
       }
     } else {
       console.debug('[WWC] positions cached used', { currentParticipantSet, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
     }
 
-    // Return positions in the order of current others array, using cached map
     return others.map(t => ({
       key: t.key,
       ...(positionMapRef.current.get(t.key) || { left: 0, top: 0 })
@@ -303,16 +289,14 @@ export default function MeetingStage({
   }, [others, stageSize, tilePx]);
 
   if (activeShareId) {
-    // For screen sharing view, we need to separate camera and screen tracks
     let screenStream, cameraStream;
     
     if (isScreenSharing) {
-      // Local user is sharing
+ 
       screenStream = screenStreamRef.current;
       cameraStream = mediaStream;
     } else {
-      // Remote user is sharing - need to split the tracks
-      // Try to resolve the remote stream by socketId first, then by participant userId.
+
       let remoteStream = remoteStreams[remoteScreenSharerId] || null;
       if (!remoteStream) {
         const participant = participants.find((p) => p.socketId === remoteScreenSharerId);
@@ -321,7 +305,6 @@ export default function MeetingStage({
         }
       }
 
-      // As a final fallback, scan all remote streams for a screen-like track (monitor or large width).
       if (!remoteStream) {
         for (const s of Object.values(remoteStreams)) {
           try {
@@ -335,15 +318,13 @@ export default function MeetingStage({
               break;
             }
           } catch (e) {
-            // ignore broken streams
+            console.log('[WWC] Screen share detection error:', e);
           }
         }
       }
 
       if (remoteStream) {
         const videoTracks = remoteStream.getVideoTracks();
-        // Typically: first track is camera, second is screen (or vice versa)
-        // We can identify screen share track by checking track settings
         const screenTrack = videoTracks.find(t => {
           const settings = t.getSettings ? t.getSettings() : {};
           return (settings && (settings.width > 1280 || settings.displaySurface === 'monitor'));
@@ -474,8 +455,6 @@ export default function MeetingStage({
             const hostR = tilePx / 2;
             const ux = dx / dist;
             const uy = dy / dist;
-
-            // Start at participant edge, end at host edge (straight line)
             const startX = pCx + ux * partR;
             const startY = pCy + uy * partR;
             const endX = hostCx - ux * hostR;

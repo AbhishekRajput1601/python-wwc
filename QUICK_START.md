@@ -10,7 +10,7 @@
 ### 1️⃣ Clone & Install
 
 ```bash
-# Backend
+
 cd backend
 python -m venv venv
 venv\Scripts\activate

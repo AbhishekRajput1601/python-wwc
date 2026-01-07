@@ -7,7 +7,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // WWC Brand Colors - Professional and Modern
         wwc: {
           50: '#f0f9ff',
           100: '#e0f2fe',
@@ -21,7 +20,7 @@ export default {
           900: '#0c4a6e',
           950: '#082f49',
         },
-        // Accent Colors
+ 
         accent: {
           50: '#fdf4ff',
           100: '#fae8ff',
@@ -34,7 +33,7 @@ export default {
           800: '#86198f',
           900: '#701a75',
         },
-        // Success Colors
+   
         success: {
           50: '#f0fdf4',
           100: '#dcfce7',
@@ -47,7 +46,7 @@ export default {
           800: '#166534',
           900: '#14532d',
         },
-        // Warning Colors
+      
         warning: {
           50: '#fffbeb',
           100: '#fef3c7',
@@ -60,7 +59,7 @@ export default {
           800: '#92400e',
           900: '#78350f',
         },
-        // Error Colors
+  
         error: {
           50: '#fef2f2',
           100: '#fee2e2',
@@ -73,7 +72,7 @@ export default {
           800: '#991b1b',
           900: '#7f1d1d',
         },
-        // Neutral Colors (Enhanced Gray Scale)
+
         neutral: {
           50: '#fafafa',
           100: '#f5f5f5',

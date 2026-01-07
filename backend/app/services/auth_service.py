@@ -14,7 +14,7 @@ class AuthService:
         self.collection = db[USERS_COLLECTION]
     
     async def create_user(self, user_data: UserCreate) -> dict:
-        """Create a new user."""
+      
         user_dict = {
             "name": user_data.name,
             "email": user_data.email,
@@ -33,7 +33,7 @@ class AuthService:
         return user_dict
 
     async def create_user_with_hashed_password(self, name: str, email: str, password_hashed: str) -> dict:
-        """Create user when password is already hashed (used after OTP verification)."""
+  
         user_dict = {
             "name": name,
             "email": email,
@@ -52,20 +52,20 @@ class AuthService:
         return user_dict
     
     async def get_user_by_email(self, email: str) -> Optional[dict]:
-        """Get user by email."""
+      
         return await self.collection.find_one({"email": email})
     
     async def get_user_by_id(self, user_id: str) -> Optional[dict]:
-        """Get user by ID."""
+        
         return await self.collection.find_one({"_id": ObjectId(user_id)})
     
     async def get_users(self, skip: int = 0, limit: int = 100) -> List[dict]:
-        """Get all users."""
+       
         cursor = self.collection.find().skip(skip).limit(limit)
         return await cursor.to_list(length=limit)
     
     async def update_user(self, user_id: str, update_data: dict) -> Optional[dict]:
-        """Update user."""
+       
         if not update_data:
             return None
         
@@ -77,14 +77,14 @@ class AuthService:
         return result
     
     async def delete_user(self, user_id: str) -> bool:
-        """Delete user."""
+     
         result = await self.collection.delete_one({"_id": ObjectId(user_id)})
         return result.deleted_count > 0
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify password."""
+       
         return verify_password(plain_password, hashed_password)
     
     def create_token(self, user_id: str) -> str:
-        """Create JWT token."""
+        
         return create_access_token({"sub": user_id})

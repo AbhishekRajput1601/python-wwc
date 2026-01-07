@@ -43,7 +43,7 @@ async def transcribe_audio(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Transcribe audio file using Whisper."""
+   
     caption_service = CaptionService(db)
     audio_data = await audio.read()
     mime_type = audio.content_type
@@ -73,10 +73,9 @@ async def transcribe_and_save(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Transcribe audio and save filtered caption entries to the DB."""
+    
     caption_service = CaptionService(db)
 
-    # read file
     audio_data = await audio.read()
     mime_type = audio.content_type
 
@@ -87,7 +86,7 @@ async def transcribe_and_save(
     detected_language = result.get("language")
     segments = result.get("captions", []) or []
 
-    # get speaker name from users collection if available
+  
     speaker_name = "Unknown"
     try:
         user_doc = await db[USERS_COLLECTION].find_one({"_id": user_id})
@@ -104,7 +103,7 @@ async def transcribe_and_save(
         if not text or len(text) <= 2:
             continue
 
-        # basic gibberish & confidence heuristics
+     
         letters = len(re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]", text))
         alpha_ratio = letters / max(1, len(text))
         MIN_LETTERS = 2
@@ -148,16 +147,11 @@ async def transcribe_global(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Transcribe uploaded audio (multipart/form-data) and save captions.
 
-    This matches the Node route that posts to `/transcribe` with form field `audio`.
-    Meeting id will be read from the form `meetingId`, or `x-meeting-id` header if not provided.
-    """
     caption_service = CaptionService(db)
 
-    # Determine meeting id from form or header
     meeting_id = meetingId or x_meeting_id
-    # If still not set, allow clients to send meetingId as query param by checking request headers wasn't provided
+   
 
     audio_data = await audio.read()
     mime_type = audio.content_type
@@ -169,7 +163,6 @@ async def transcribe_global(
     detected_language = result.get("language")
     segments = result.get("captions", []) or []
 
-    # get speaker name from users collection if available
     speaker_name = "Unknown"
     try:
         user_doc = await db["users"].find_one({"_id": user_id})
@@ -181,7 +174,7 @@ async def transcribe_global(
     saved_count = 0
     filtered = []
 
-    # Same filtering logic as the path-based transcribe_and_save
+   
     import re
     from datetime import datetime
 
@@ -203,7 +196,7 @@ async def transcribe_global(
         duration = float(end - start) if end and start else 0.0
 
         if not meeting_id:
-            # If no meeting id provided, we won't save but still return the segments
+   
             filtered.append({"timestamp": timestamp.isoformat(), "text": text, "duration": duration})
             continue
 
@@ -232,7 +225,7 @@ async def delete_captions(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Delete captions for a meeting."""
+    
     caption_service = CaptionService(db)
     deleted = await caption_service.delete_captions(meeting_id)
     
@@ -255,7 +248,7 @@ async def download_captions(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Download captions in specified format."""
+   
     caption_service = CaptionService(db)
     captions = await caption_service.get_captions(meeting_id)
     
@@ -285,7 +278,7 @@ async def export_captions(
     user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Export captions for a specific language in specified format."""
+   
     caption_service = CaptionService(db)
     captions = await caption_service.get_captions(meeting_id)
     

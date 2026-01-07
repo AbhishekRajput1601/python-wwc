@@ -162,7 +162,6 @@ class MeetingService {
       formData.append('file', fileBlob, `recording-${meetingId}.webm`);
       const response = await api.post(`/meetings/${meetingId}/recordings`, formData);
 
-      // Server may not return a friendly message; show a consistent success toast
       if (response.data?.message) {
         notify.success(response.data.message);
       } else if (response.data && response.data.success) {

@@ -13,7 +13,7 @@ import Signup from './components/Auth/Signup'
 import ForgotPassword from './components/Auth/ForgotPassword'
 import UserProfile from './components/Auth/UserProfile'
 
-// Protected route component
+
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
@@ -24,7 +24,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    // Store the location they were trying to access
+ 
     setRedirectTo(location.pathname);
     return <Navigate to="/login" replace />;
   }

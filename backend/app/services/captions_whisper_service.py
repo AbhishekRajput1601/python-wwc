@@ -10,13 +10,12 @@ from app.core.config import settings
 from filetype import guess as detect_filetype
 
 
-# Concurrency semaphore
 MAX_CONCURRENT = int(getattr(settings, 'TRANSCRIBE_CONCURRENCY', 2))
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
 
 async def _run_subprocess(cmd: list) -> None:
-    """Run blocking subprocess in thread executor."""
+ 
     def _run():
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if proc.returncode != 0:
@@ -26,13 +25,10 @@ async def _run_subprocess(cmd: list) -> None:
 
 
 async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) -> str:
-    """Write input buffer/file to temp file and convert to 16k mono PCM S16LE WAV using ffmpeg.
 
-    Returns path to the output WAV file. Caller is responsible for deletion.
-    """
     tmp_dir = tempfile.gettempdir()
     uid = next(tempfile._get_candidate_names())
-    # determine extension
+    
     ext = ''
     if input_type:
         t = input_type.lower()
@@ -50,9 +46,9 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
     input_base = os.path.join(tmp_dir, f'whisper_input_{uid}')
     output_path = os.path.join(tmp_dir, f'whisper_output_{uid}.wav')
 
-    # write input
+   
     if isinstance(file_or_buffer, (bytes, bytearray)):
-        # try to detect
+     
         if not ext:
             try:
                 ft = detect_filetype(file_or_buffer)
@@ -72,7 +68,6 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
     else:
         raise ValueError('file_or_buffer must be bytes or filepath string')
 
-    # detect ffmpeg binary path and prepare conversion function
     ffmpeg_path = shutil.which('ffmpeg')
 
     async def _try_convert(path):
@@ -84,9 +79,8 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
         ]
         await _run_subprocess(cmd)
 
-    # try conversion, on failure try alternative extensions (if buffer)
     try:
-        # If ffmpeg is unavailable and input already a WAV, skip conversion and return input path
+
         if not shutil.which('ffmpeg') and os.path.splitext(input_path)[1].lower() == '.wav':
             return input_path
 
@@ -97,7 +91,7 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
             pass
         return output_path
     except Exception as first_err:
-        # attempt alternatives if original was buffer
+    
         if isinstance(file_or_buffer, (bytes, bytearray)):
             alt_exts = ['.webm', '.ogg', '.mp3', '.wav', '.m4a']
             tried = {os.path.splitext(input_path)[1]}
@@ -125,7 +119,7 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
                         pass
                     tried.add(alt)
 
-        # cleanup and raise
+     
         try:
             os.remove(input_path)
         except Exception:
@@ -138,10 +132,7 @@ async def convert_to_wav_file(file_or_buffer, input_type: Optional[str] = None) 
 
 
 async def transcribe_audio(file_or_buffer, language: Optional[str] = None, translate: bool = False, input_type: Optional[str] = None) -> dict:
-    """Transcribe audio by converting to WAV and forwarding to external Whisper HTTP service.
 
-    Returns parsed JSON response from the Whisper endpoint.
-    """
     url = os.getenv('WHISPER_URL') or getattr(settings, 'WHISPER_URL', 'http://localhost:5001/transcribe')
     max_retries = int(os.getenv('WHISPER_MAX_RETRIES') or getattr(settings, 'WHISPER_MAX_RETRIES', 5))
     timeout_ms = int(os.getenv('WHISPER_TIMEOUT_MS') or getattr(settings, 'WHISPER_TIMEOUT_MS', 600000))
@@ -166,7 +157,7 @@ async def transcribe_audio(file_or_buffer, language: Optional[str] = None, trans
                 return sec * 1000
             except Exception:
                 try:
-                    # best-effort fallback
+                  
                     return None
                 except Exception:
                     return None
@@ -181,7 +172,7 @@ async def transcribe_audio(file_or_buffer, language: Optional[str] = None, trans
                 headers = {'User-Agent': 'wwc-captions-service/1.0'}
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     resp = await client.post(url, data=data, files=files, headers=headers)
-                # if HTML response, treat as error
+
                 text = resp.text
                 if isinstance(text, str) and text.strip().startswith('<'):
                     raise RuntimeError('Received HTML response from whisper endpoint')

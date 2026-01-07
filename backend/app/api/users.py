@@ -43,7 +43,7 @@ async def get_user(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get user by ID."""
+    
     auth_service = AuthService(db)
     user = await auth_service.get_user_by_id(user_id)
     
@@ -137,17 +137,16 @@ async def remove_recent_meeting(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Remove a meeting from the current user's Recent Meetings list (does not delete the meeting)."""
+ 
     users_coll = db[USERS_COLLECTION]
     try:
-        # support both ObjectId and string _id shapes
         try:
             result = await users_coll.update_one({"_id": ObjectId(current_user_id)}, {"$addToSet": {"hidden_meetings": meeting_id}})
         except Exception:
             result = await users_coll.update_one({"_id": current_user_id}, {"$addToSet": {"hidden_meetings": meeting_id}})
 
         if result.modified_count == 0:
-            # even if no change (already hidden), return success
+        
             pass
 
         return {"success": True, "message": "Meeting removed from your recent list"}

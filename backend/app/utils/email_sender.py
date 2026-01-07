@@ -76,15 +76,9 @@ def _send_via_sendgrid(sender: str, subject: str, recipient: str, body: str, htm
 
 
 def send_email(subject: str, recipient: str, body: str, html: Optional[str] = None) -> bool:
-        """Send an email. Accepts optional HTML content.
 
-        If `SENDGRID_API_KEY` is configured, use SendGrid API (recommended on Render).
-        Otherwise fall back to SMTP using configured SMTP settings.
-        Returns True on success, False otherwise.
-        """
         sender = settings.EMAIL_FROM or settings.SMTP_USER
 
-        # Prefer SendGrid when an API key is provided (Render blocks SMTP outbound ports)
         if getattr(settings, "SENDGRID_API_KEY", None):
                 return _send_via_sendgrid(sender, subject, recipient, body, html)
 
@@ -92,9 +86,9 @@ def send_email(subject: str, recipient: str, body: str, html: Optional[str] = No
 
 
 def build_otp_email(code: str, expires_minutes: int = 5) -> str:
-        """Return HTML for an OTP email styled for WWC (dark theme, purple gradient)."""
+   
         site_name = "WWC"
-        # Colors inspired by provided theme
+       
         gradient_start = "#6D5EFE"
         gradient_end = "#8A78FF"
         background = "#0b1020"
@@ -153,7 +147,7 @@ def build_otp_email(code: str, expires_minutes: int = 5) -> str:
 
 
 def build_welcome_email(display_name: str, action_url: Optional[str] = None) -> str:
-        """Return HTML for a welcome / signup confirmation email styled for WWC."""
+
         site_name = "WWC"
         gradient_start = "#6D5EFE"
         gradient_end = "#8A78FF"

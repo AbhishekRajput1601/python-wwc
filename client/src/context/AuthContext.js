@@ -74,8 +74,7 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  
-  // Load user profile on app initialization
+
   const loadUser = async () => {
     const token = authService.getToken();
     
@@ -104,33 +103,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout user
   const logout = async () => {
     try {
       await authService.logout();
       dispatch({ type: 'LOGOUT' });
     } catch (error) {
-      // Even if logout API fails, clear local state
       dispatch({ type: 'LOGOUT' });
     }
   };
 
-  // Clear errors
   const clearErrors = () => {
     dispatch({ type: 'CLEAR_ERRORS' });
   };
 
-  // Set redirect destination
   const setRedirectTo = (path) => {
     dispatch({ type: 'SET_REDIRECT_TO', payload: path });
   };
 
-  // Clear redirect destination
   const clearRedirectTo = () => {
     dispatch({ type: 'CLEAR_REDIRECT_TO' });
   };
 
-  // Update user preferences
   const updatePreferences = async (preferences) => {
     try {
       const result = await authService.updatePreferences(preferences);

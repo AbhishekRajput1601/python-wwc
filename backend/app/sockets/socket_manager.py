@@ -20,24 +20,21 @@ sio = socketio.AsyncServer(
     engineio_logger=True
 )
 
-# Store active connections
 active_meetings: Dict[str, Set[str]] = {}  
 socket_to_meeting: Dict[str, str] = {} 
 socket_to_user: Dict[str, dict] = {}  
 
-# Meetings that currently have captions enabled
 captions_enabled_meetings: Set[str] = set()
-# Optional per-meeting language selection
+
 meeting_languages: Dict[str, str] = {}
 
 logger = logging.getLogger(__name__)
 
-# Reduce engineio/socketio noisy INFO logs so terminal shows only important caption lines
 logging.getLogger('engineio').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 logging.getLogger('engineio.server').setLevel(logging.WARNING)
 logging.getLogger('socketio.server').setLevel(logging.WARNING)
-# Avoid noisy handlers from other libs
+
 for _n in ('engineio', 'engineio.server', 'socketio', 'socketio.server'):
     lg = logging.getLogger(_n)
     lg.propagate = False
@@ -47,13 +44,13 @@ for _n in ('engineio', 'engineio.server', 'socketio', 'socketio.server'):
 
 @sio.event
 async def connect(sid, environ):
-    """Handle client connection."""
+   
     logger.info(f"Socket connected: {sid}")
 
 
 @sio.event
 async def disconnect(sid):
-    """Handle client disconnection."""
+   
     logger.info(f"Socket disconnected: {sid}")
  
     if sid in socket_to_meeting:
@@ -73,16 +70,14 @@ async def disconnect(sid):
 
 @sio.event
 async def join_meeting(sid, data):
-    """Handle user joining a meeting."""
+    
     meeting_id = data.get("meetingId")
     user_id = data.get("userId")
     user_name = data.get("userName", "User")
     
     logger.info(f"[WWC] User {user_name} ({user_id}) joining meeting: {meeting_id}")
     logger.info(f"[WWC] join_meeting data received: {data}")
-    
-    # Check meeting status in DB and reject if it has ended
-    # Also fetch host information
+
     host_id = None
     try:
         db = get_database()
@@ -90,7 +85,7 @@ async def join_meeting(sid, data):
         if doc and doc.get("status") == "ended":
             await sio.emit("join-error", {"message": "This meeting has ended."}, to=sid)
             return
-        # Extract host ID
+     
         if doc and doc.get("host"):
             host = doc.get("host")
             if isinstance(host, dict):
@@ -101,10 +96,7 @@ async def join_meeting(sid, data):
         logger.exception("Failed to check meeting status for %s", meeting_id)
 
     await sio.enter_room(sid, meeting_id)
-    # Check for an existing connection for this user in the same meeting.
-    # If found, treat this as a reconnection (e.g. browser refresh) and
-    # replace the old socket id mapping instead of creating a duplicate
-    # participant entry.
+ 
     replaced_old_sid = None
     if meeting_id in active_meetings and user_id:
         for socket_id in list(active_meetings.get(meeting_id, set())):
@@ -112,14 +104,13 @@ async def join_meeting(sid, data):
                 replaced_old_sid = socket_id
                 break
 
-    # If reconnection, remove old mappings for the previous socket id
     if replaced_old_sid:
         logger.info(f"User {user_name} ({user_id}) reconnecting: replacing socket {replaced_old_sid} -> {sid}")
-        # remove old socket from room and internal maps if still present
+
         try:
             await sio.leave_room(replaced_old_sid, meeting_id)
         except Exception:
-            # old socket may already be disconnected; ignore
+ 
             pass
 
         active_meetings[meeting_id].discard(replaced_old_sid)
@@ -128,15 +119,12 @@ async def join_meeting(sid, data):
         if replaced_old_sid in socket_to_user:
             del socket_to_user[replaced_old_sid]
 
-        # Add the new socket id mappings
         socket_to_meeting[sid] = meeting_id
         socket_to_user[sid] = {"id": user_id, "name": user_name}
         if meeting_id not in active_meetings:
             active_meetings[meeting_id] = set()
         active_meetings[meeting_id].add(sid)
 
-        # Notify other participants that this user reconnected and provide
-        # the new socket id so peers can update their peer-connections.
         await sio.emit(
             "user-reconnected",
             {
@@ -149,7 +137,7 @@ async def join_meeting(sid, data):
             skip_sid=sid,
         )
     else:
-        # Fresh join (no existing participant with same user id)
+
         socket_to_meeting[sid] = meeting_id
         socket_to_user[sid] = {"id": user_id, "name": user_name}
         
@@ -193,11 +181,9 @@ async def join_meeting(sid, data):
     logger.info(f"[WWC] Sending existing_participants to {sid}: {existing_participants}")
     await sio.emit("existing-participants", existing_participants, to=sid)
 
-    # Emit host information to all participants (including the newly joined one)
     if host_id:
         await sio.emit("host-updated", {"hostId": host_id}, room=meeting_id)
 
-    # Send last 100 chat messages as history (if meeting doc exists)
     try:
         db = get_database()
         doc = await db[MEETINGS_COLLECTION].find_one({"meeting_id": meeting_id}, {"messages": {"$slice": -100}})
@@ -217,7 +203,7 @@ async def join_meeting(sid, data):
 
 @sio.event
 async def leave_meeting(sid, data):
-    """Handle user leaving a meeting."""
+  
     meeting_id = socket_to_meeting.get(sid)
     
     if meeting_id:
@@ -247,7 +233,7 @@ async def leave_meeting(sid, data):
 
 @sio.on('camera-state-changed')
 async def handle_camera_state_changed(sid, data):
-    """Handle camera state change and broadcast to all participants."""
+
     meeting_id = socket_to_meeting.get(sid)
     if not meeting_id:
         logger.warning(f"[WWC] camera-state-changed: No meeting found for socket {sid}")
@@ -257,8 +243,7 @@ async def handle_camera_state_changed(sid, data):
     is_video_on = data.get("isVideoOn")
     
     logger.info(f"[WWC] Camera state changed for user {user_id}: {is_video_on} in meeting {meeting_id}")
-    
-    # Broadcast to all participants in the room (including sender)
+
     await sio.emit(
         "camera-state-changed",
         {
@@ -271,7 +256,7 @@ async def handle_camera_state_changed(sid, data):
 
 @sio.event
 async def webrtc_offer(sid, data):
-    """Handle WebRTC offer."""
+   
     target_sid = data.get("targetSocketId")
     offer = data.get("offer")
     
@@ -288,7 +273,7 @@ async def webrtc_offer(sid, data):
 
 @sio.event
 async def webrtc_answer(sid, data):
-    """Handle WebRTC answer."""
+  
     target_sid = data.get("targetSocketId")
     answer = data.get("answer")
     
@@ -305,7 +290,7 @@ async def webrtc_answer(sid, data):
 
 @sio.event
 async def webrtc_ice_candidate(sid, data):
-    """Handle ICE candidate."""
+   
     target_sid = data.get("targetSocketId")
     candidate = data.get("candidate")
     
@@ -322,7 +307,7 @@ async def webrtc_ice_candidate(sid, data):
 
 @sio.event
 async def send_chat_message(sid, data):
-    """Handle chat message."""
+    
     meeting_id = socket_to_meeting.get(sid)
     user = socket_to_user.get(sid)
     text = data.get("text", "").strip()
@@ -335,7 +320,6 @@ async def send_chat_message(sid, data):
             "timestamp": data.get("timestamp") or int(datetime.utcnow().timestamp() * 1000)
         }
 
-        # persist message to DB
         try:
             db = get_database()
             await db[MEETINGS_COLLECTION].update_one(
@@ -359,7 +343,7 @@ async def send_chat_message(sid, data):
 
 @sio.event
 async def start_captions(sid, data):
-    """Handle start captions request."""
+
     meeting_id = data.get("meetingId")
     language = data.get("language", "en")
     
@@ -367,7 +351,6 @@ async def start_captions(sid, data):
  
     await sio.enter_room(sid, f"captions-{meeting_id}")
 
-    # Mark captions enabled for the meeting and remember language
     try:
         captions_enabled_meetings.add(meeting_id)
         meeting_languages[meeting_id] = language
@@ -386,7 +369,7 @@ async def start_captions(sid, data):
 
 @sio.event
 async def stop_captions(sid, data):
-    """Handle stop captions request."""
+  
     meeting_id = data.get("meetingId")
     logger.info(f"Stopping captions for meeting {meeting_id} requested by {sid}")
     try:
@@ -397,7 +380,6 @@ async def stop_captions(sid, data):
     except Exception:
         logger.exception("Failed to stop captions for %s", meeting_id)
 
-    # Leave captions room (best-effort)
     try:
         await sio.leave_room(sid, f"captions-{meeting_id}")
     except Exception:
@@ -441,7 +423,7 @@ async def toggle_video(sid, data):
 
 @sio.event
 async def audio_data(sid, data):
-    """Handle audio data for transcription."""
+
     meeting_id = data.get("meetingId")
     audio_data = data.get("audioData")
     language = data.get("language", "en")
@@ -451,11 +433,10 @@ async def audio_data(sid, data):
     if not meeting_id or not audio_data:
         return
 
-    # Normalize audio bytes (support base64 strings, list of ints, or bytes)
     audio_bytes = None
     try:
         if isinstance(audio_data, str):
-            # handle data url like 'data:audio/ogg;base64,...'
+            
             if audio_data.startswith("data:") and "," in audio_data:
                 _, b64 = audio_data.split(",", 1)
             else:
@@ -477,21 +458,20 @@ async def audio_data(sid, data):
     speaker_id = user["id"] if user else None
 
     logger.info(f"Received audio data from {speaker_name} in meeting {meeting_id}")
-    # If captions are not enabled for this meeting, ignore audio data
+
     if meeting_id not in captions_enabled_meetings:
         logger.info("Ignoring audio for meeting %s because captions are not enabled", meeting_id)
         return
 
-    # Transcribe using local faster_whisper model (no external service needed)
     try:
         db = get_database()
         caption_service = CaptionService(db)
-        # prefer the meeting-wide language if set
+  
         preferred_lang = meeting_languages.get(meeting_id) or language
         result = await caption_service.transcribe_audio(audio_bytes, language=preferred_lang, translate=translate, mime_type=mime_type)
     except Exception as e:
         logger.exception("Transcription failed: %s", e)
-        # notify clients in meeting that transcription failed
+ 
         try:
             await sio.emit('caption-error', {"meetingId": meeting_id, "message": str(e)}, room=meeting_id)
         except Exception:
@@ -504,7 +484,6 @@ async def audio_data(sid, data):
     if not captions:
         return
 
-    # Persist and emit each caption segment
     try:
         db = get_database()
         caption_service = CaptionService(db)
@@ -528,7 +507,7 @@ async def audio_data(sid, data):
 
             try:
                 saved = await caption_service.add_caption(meeting_id, caption_entry)
-                # Log only the caption text that will be saved and visible
+
                 logger.info(f"CaptionSaved meeting={meeting_id} speaker={speaker_name} text={text[:200]}")
             except Exception:
                 logger.exception("Failed to save caption for meeting %s", meeting_id)
@@ -543,7 +522,6 @@ async def audio_data(sid, data):
                 "duration": duration,
             }
 
-            # Emit to meeting room and captions-specific room to ensure listeners receive it
             try:
                 await sio.emit("caption-update", payload, room=meeting_id)
                 await sio.emit("caption-update", payload, room=f"captions-{meeting_id}")
@@ -556,7 +534,7 @@ async def audio_data(sid, data):
 
 @sio.event
 async def new_caption(sid, data):
-    """Handle new caption (from transcription service)."""
+ 
     meeting_id = data.get("meetingId")
     caption = data.get("caption")
     
@@ -565,7 +543,6 @@ async def new_caption(sid, data):
         await sio.emit("caption-update", caption, room=meeting_id)
 
 
-# Compatibility aliases for client event names (dashed)
 @sio.on("join-meeting")
 async def on_join_meeting(sid, data):
     return await join_meeting(sid, data)
@@ -618,7 +595,6 @@ async def on_ice_candidate(sid, data):
     return await webrtc_ice_candidate(sid, data)
 
 
-# Compatibility alias for dashed client event name
 @sio.on("audio-data")
 async def on_audio_data(sid, data):
     return await audio_data(sid, data)
@@ -646,7 +622,7 @@ async def on_stop_screen_share(sid, data=None):
 
 @sio.event
 async def start_screen_share(sid):
-    """Handle user starting screen share."""
+    
     meeting_id = socket_to_meeting.get(sid)
     
     if meeting_id:
@@ -662,7 +638,7 @@ async def start_screen_share(sid):
 
 @sio.event
 async def stop_screen_share(sid):
-    """Handle user stopping screen share."""
+   
     meeting_id = socket_to_meeting.get(sid)
     
     if meeting_id:
@@ -678,7 +654,7 @@ async def stop_screen_share(sid):
 
 @sio.event
 async def end_meeting(sid, data):
-    """Handle meeting end by host."""
+   
     meeting_id = data.get("meetingId")
     
     if not meeting_id:
@@ -696,12 +672,11 @@ async def end_meeting(sid, data):
             room=meeting_id
         )
 
-        # mark meeting ended in DB and possibly generate captions file
         try:
             db = get_database()
             from app.services.meeting_service import MeetingService
             meeting_service = MeetingService(db)
-            # this will update status and also attempt to gather/upload captions
+ 
             await meeting_service.end_meeting(meeting_id)
         except Exception:
             logger.exception("Failed to update meeting end state for %s", meeting_id)

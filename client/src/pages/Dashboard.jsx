@@ -54,7 +54,7 @@ const Dashboard = () => {
     if (!id) return;
 
     try {
-      // Fetch meeting first and validate status
+
       const meetingRes = await api.get(`/meetings/${id}`);
       const meeting = meetingRes?.data?.meeting;
       if (!meeting) {
@@ -102,7 +102,6 @@ const Dashboard = () => {
     }
   };
 
-  // Confirmation modal state and handlers
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState(null);
 
@@ -111,18 +110,16 @@ const Dashboard = () => {
     setShowConfirm(true);
   };
 
-  // confirm action: either permanently delete (host) or remove from user's recent list (participant)
+
   const [confirmIsHostAction, setConfirmIsHostAction] = useState(false);
 
   const confirmDeleteMeeting = async () => {
     if (!confirmTarget) return;
     try {
       if (confirmIsHostAction) {
-        // host: delete meeting permanently
         await api.delete(`/meetings/delete-meeting/${confirmTarget}`);
         setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
       } else {
-        // participant: remove from recent list only
         await api.post(`/users/me/recent/${confirmTarget}/remove`);
         setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
       }
@@ -450,7 +447,6 @@ const Dashboard = () => {
                           const currentUserId = String(user?.id || user?._id || user || "");
                           const isHost = hostId && hostId === currentUserId;
 
-                          // After a meeting has ended: hosts see both Remove and Delete; participants see Remove only
                           if (meeting.status === "ended") {
                             if (isHost) {
                               return (
@@ -473,7 +469,6 @@ const Dashboard = () => {
                               );
                             }
 
-                            // participant
                             return (
                               <button
                                 onClick={() => { setConfirmIsHostAction(false); onDeleteClick(meeting.meetingId); }}
@@ -485,7 +480,6 @@ const Dashboard = () => {
                             );
                           }
 
-                          // For non-ended meetings, keep previous behavior (single button: host=Delete, others=Remove)
                           const btnLabel = isHost ? "Delete" : "Remove";
                           const title = isHost
                             ? "Delete meeting for everyone"

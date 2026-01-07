@@ -51,7 +51,7 @@ const Signup = () => {
 
     try {
       const { confirmPassword, ...registerData } = formData;
-      // Request OTP to be sent to user's email
+
       const resp = await authService.requestRegistrationOtp(registerData);
       if (resp.success) {
         setStep('verify');
@@ -68,7 +68,6 @@ const Signup = () => {
     setLoading(false);
   };
 
-  // OTP verify
   const handleVerify = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -112,7 +111,6 @@ const Signup = () => {
     setResendLoading(false);
   };
 
-  // countdown timer
   useEffect(() => {
     if (countdown <= 0) return;
     const t = setInterval(() => setCountdown((c) => c - 1), 1000);

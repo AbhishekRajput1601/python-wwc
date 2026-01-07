@@ -16,7 +16,7 @@ const Login = () => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      // If there's a redirect destination, use it; otherwise go to dashboard
+
       if (redirectTo) {
         navigate(redirectTo, { replace: true });
         clearRedirectTo();
@@ -51,8 +51,6 @@ const Login = () => {
             user: result.user,
           },
         });
-
-        // navigation handled by useEffect which respects any stored redirect
       } else {
         setError(result.message);
       }
