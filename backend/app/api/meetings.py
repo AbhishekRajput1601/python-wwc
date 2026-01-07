@@ -5,6 +5,7 @@ from typing import Optional
 from app.db.session import get_db
 from app.models.meeting import MeetingCreate, MeetingUpdate
 from app.services.meeting_service import MeetingService
+from app.sockets.socket_manager import sio
 from app.core.security import get_current_user_id
 from fastapi.responses import PlainTextResponse
 
@@ -170,7 +171,13 @@ async def end_meeting(
         )
     
     ended_meeting = await meeting_service.end_meeting(meeting_id)
-    
+    # Notify connected participants via socket that meeting has ended
+    try:
+        await sio.emit("meeting-ended", {"meetingId": meeting_id, "reason": "ended_by_host"}, room=meeting_id)
+    except Exception:
+        # don't fail the API if socket emission fails
+        pass
+
     return {
         "success": True,
         "meeting": ended_meeting

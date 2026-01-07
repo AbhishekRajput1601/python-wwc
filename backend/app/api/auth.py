@@ -171,7 +171,7 @@ async def request_password_reset(
         user = await auth_service.get_user_by_email(email)
         if not user:
             # Inform the client that the email is not registered
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="You don't have any account")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found please sign up !")
 
         otp_service = OTPService(db)
         otp_code = await otp_service.create_password_reset_otp(email, str(user.get("_id")), ttl_seconds=180)

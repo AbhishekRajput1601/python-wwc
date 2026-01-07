@@ -78,7 +78,7 @@ class AuthService {
       if (response.data?.message) notify.success(response.data.message);
       return response.data;
     } catch (error) {
-      const message = error.response?.data?.message || 'Failed to request password reset';
+      const message = error.response?.data?.message || 'Account not found please sign up !';
       notify.error(message);
       return {
         success: false,

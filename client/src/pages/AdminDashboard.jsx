@@ -378,10 +378,7 @@ const AdminDashboard = () => {
             </div>
             <span className="text-2xl sm:text-3xl font-bold">{stats.totalMeetings}</span>
           </div>
-          <h3 className="text-xs sm:text-sm font-medium opacity-90">Total Meetings</h3>
-          <p className="text-[10px] sm:text-xs opacity-75 mt-0.5 sm:mt-1">
-            {stats.activeMeetings} active, {stats.scheduledMeetings} scheduled
-          </p>
+            <h3 className="text-xs sm:text-sm font-medium opacity-90">Total Meetings</h3>
         </div>
 
         <div className="bg-gradient-to-br from-success-500 to-success-600 rounded-xl sm:rounded-2xl shadow-medium p-4 sm:p-5 md:p-6 text-white">
@@ -402,15 +399,12 @@ const AdminDashboard = () => {
               </svg>
             </div>
             <span className="text-2xl sm:text-3xl font-bold">
-              {stats.activeParticipants}
+              {stats.activeMeetings}
             </span>
           </div>
           <h3 className="text-xs sm:text-sm font-medium opacity-90">
-            Active Participants
+            Active Meeting
           </h3>
-          <p className="text-[10px] sm:text-xs opacity-75 mt-0.5 sm:mt-1">
-            {stats.totalParticipants} total participants
-          </p>
         </div>
 
         <div className="bg-gradient-to-br from-neutral-500 to-neutral-600 rounded-xl sm:rounded-2xl shadow-medium p-4 sm:p-5 md:p-6 text-white">

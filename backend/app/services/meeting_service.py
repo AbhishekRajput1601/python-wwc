@@ -104,10 +104,28 @@ class MeetingService:
         status_filter: Optional[str] = None
     ) -> List[dict]:
         """Get meetings for a user."""
+        # Exclude meetings the user has chosen to hide (stored on user document)
+        hidden = []
+        try:
+            user_doc = await self.users_collection.find_one({"_id": ObjectId(user_id)})
+            if user_doc:
+                hidden = user_doc.get("hidden_meetings", []) or []
+        except Exception:
+            # fallback: try string id lookup
+            try:
+                user_doc = await self.users_collection.find_one({"_id": user_id})
+                if user_doc:
+                    hidden = user_doc.get("hidden_meetings", []) or []
+            except Exception:
+                hidden = []
+
         query = {
-            "$or": [
-                {"host": user_id},
-                {"participants.user": user_id}
+            "$and": [
+                {"$or": [
+                    {"host": user_id},
+                    {"participants.user": user_id}
+                ]},
+                {"meeting_id": {"$nin": hidden}}
             ]
         }
         
@@ -526,6 +544,7 @@ class MeetingService:
         for participant in participants:
             user = await self.users_collection.find_one({"_id": ObjectId(participant["user"])})
             participant_details.append({
+                "user": participant["user"],
                 "user_id": participant["user"],
                 "name": user["name"] if user else "Unknown",
                 "email": user["email"] if user else "Unknown",

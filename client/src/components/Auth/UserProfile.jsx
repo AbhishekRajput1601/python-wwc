@@ -721,91 +721,110 @@ const UserProfile = () => {
           </div>
         </div>
 
-        <div className="col-span-1 md:col-span-2 p-3 sm:p-4 border rounded-lg">
-          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        {user?.role === "admin" ? (
+          <div className="col-span-1 md:col-span-2 p-3 sm:p-4 border rounded-lg">
+            <div className="space-y-2">
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700">
-                  Full name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  required
-                />
+                <div className="text-xs text-neutral-600">Full name</div>
+                <div className="font-medium">{form.name}</div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-600">Email</div>
+                <div className="font-medium break-all">{form.email}</div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-600">Role</div>
+                <div className="font-medium">{form.role}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="col-span-1 md:col-span-2 p-3 sm:p-4 border rounded-lg">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700">
+                    Full name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm bg-gray-50"
+                    required
+                    disabled
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700">
-                  Email
+                  Profile Image URL
                 </label>
                 <input
-                  type="email"
-                  name="email"
-                  value={form.email}
+                  type="url"
+                  name="avatar"
+                  placeholder="https://..."
+                  value={form.avatar || ""}
                   onChange={handleChange}
-                  className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm bg-gray-50"
-                  required
-                  disabled
+                  className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700">
-                Profile Image URL
-              </label>
-              <input
-                type="url"
-                name="avatar"
-                placeholder="https://..."
-                value={form.avatar || ""}
-                onChange={handleChange}
-                className="mt-1 block w-full border rounded-md px-2 sm:px-3 py-1.5 sm:py-2 text-sm"
-              />
-            </div>
+              <div className="flex items-center justify-end space-x-2 sm:space-x-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // reset to last saved
+                    if (user) {
+                      setForm({
+                        name: user.name || "",
+                        email: user.email || "",
+                        avatar: user.avatar || "",
+                        role: user.role || "user",
+                        preferences: user.preferences || {
+                          defaultLanguage: "en",
+                          captionsEnabled: true,
+                        },
+                      });
+                      setAvatarPreview(user.avatar || "");
+                      setError("");
+                      setSuccess("");
+                    } else if (loadUser) {
+                      await loadUser();
+                    }
+                  }}
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs sm:text-sm"
+                >
+                  Reset
+                </button>
 
-            <div className="flex items-center justify-end space-x-2 sm:space-x-3">
-              <button
-                type="button"
-                onClick={async () => {
-                  // reset to last saved
-                  if (user) {
-                    setForm({
-                      name: user.name || "",
-                      email: user.email || "",
-                      avatar: user.avatar || "",
-                      role: user.role || "user",
-                      preferences: user.preferences || {
-                        defaultLanguage: "en",
-                        captionsEnabled: true,
-                      },
-                    });
-                    setAvatarPreview(user.avatar || "");
-                    setError("");
-                    setSuccess("");
-                  } else if (loadUser) {
-                    await loadUser();
-                  }
-                }}
-                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs sm:text-sm"
-              >
-                Reset
-              </button>
-
-              <button
-                type="submit"
-                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-xs sm:text-sm"
-                disabled={loading}
-              >
-                {loading ? "Updating..." : "Update"}
-              </button>
-            </div>
-          </form>
-        </div>
+                <button
+                  type="submit"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-xs sm:text-sm"
+                  disabled={loading}
+                >
+                  {loading ? "Updating..." : "Update"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 </div>
   );

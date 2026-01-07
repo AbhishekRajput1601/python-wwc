@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.models.user import UserUpdate
 from app.services.auth_service import AuthService
 from app.core.security import get_current_user_id
+from app.db.models import USERS_COLLECTION
+from bson import ObjectId
 
 router = APIRouter()
 
@@ -127,3 +129,27 @@ async def delete_user(
         "success": True,
         "message": "User deleted successfully"
     }
+
+
+@router.post("/me/recent/{meeting_id}/remove", response_model=dict)
+async def remove_recent_meeting(
+    meeting_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Remove a meeting from the current user's Recent Meetings list (does not delete the meeting)."""
+    users_coll = db[USERS_COLLECTION]
+    try:
+        # support both ObjectId and string _id shapes
+        try:
+            result = await users_coll.update_one({"_id": ObjectId(current_user_id)}, {"$addToSet": {"hidden_meetings": meeting_id}})
+        except Exception:
+            result = await users_coll.update_one({"_id": current_user_id}, {"$addToSet": {"hidden_meetings": meeting_id}})
+
+        if result.modified_count == 0:
+            # even if no change (already hidden), return success
+            pass
+
+        return {"success": True, "message": "Meeting removed from your recent list"}
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove meeting from recent list")

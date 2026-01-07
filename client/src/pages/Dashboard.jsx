@@ -111,17 +111,28 @@ const Dashboard = () => {
     setShowConfirm(true);
   };
 
+  // confirm action: either permanently delete (host) or remove from user's recent list (participant)
+  const [confirmIsHostAction, setConfirmIsHostAction] = useState(false);
+
   const confirmDeleteMeeting = async () => {
     if (!confirmTarget) return;
     try {
-      await api.delete(`/meetings/delete-meeting/${confirmTarget}`);
-      setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
+      if (confirmIsHostAction) {
+        // host: delete meeting permanently
+        await api.delete(`/meetings/delete-meeting/${confirmTarget}`);
+        setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
+      } else {
+        // participant: remove from recent list only
+        await api.post(`/users/me/recent/${confirmTarget}/remove`);
+        setMeetings((prev) => prev.filter((meeting) => meeting.meetingId !== confirmTarget));
+      }
     } catch (error) {
-      console.error("Error deleting meeting:", error);
+      console.error("Error removing/deleting meeting:", error);
       notify.error("Failed to remove meeting. Please try again.");
     } finally {
       setShowConfirm(false);
       setConfirmTarget(null);
+      setConfirmIsHostAction(false);
     }
   };
 
@@ -429,23 +440,62 @@ const Dashboard = () => {
                         </span>
 
                         {(() => {
-                          const hostId =
-                            meeting.host &&
-                            (meeting.host._id
-                              ? String(meeting.host._id)
-                              : String(meeting.host));
-                          const isHost =
-                            hostId &&
-                            String(hostId) === String(user?.id || user?._id);
+                          const hostId = (() => {
+                            if (!meeting.host) return null;
+                            if (typeof meeting.host === "string") return String(meeting.host);
+                            if (meeting.host.id) return String(meeting.host.id);
+                            if (meeting.host._id) return String(meeting.host._id);
+                            return String(meeting.host);
+                          })();
+                          const currentUserId = String(user?.id || user?._id || user || "");
+                          const isHost = hostId && hostId === currentUserId;
+
+                          // After a meeting has ended: hosts see both Remove and Delete; participants see Remove only
+                          if (meeting.status === "ended") {
+                            if (isHost) {
+                              return (
+                                <>
+                                  <button
+                                    onClick={() => { setConfirmIsHostAction(false); onDeleteClick(meeting.meetingId); }}
+                                    className="bg-white text-black border-2 border-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-200 transition-all duration-200 shadow-soft hover:shadow-medium whitespace-nowrap mr-2"
+                                    title="Remove this meeting from your recent list"
+                                  >
+                                    Remove
+                                  </button>
+                                  <button
+                                    onClick={() => { setConfirmIsHostAction(true); onDeleteClick(meeting.meetingId); }}
+                                    className="bg-white text-black border-2 border-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-200 transition-all duration-200 shadow-soft hover:shadow-medium whitespace-nowrap"
+                                    title="Delete meeting for everyone"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              );
+                            }
+
+                            // participant
+                            return (
+                              <button
+                                onClick={() => { setConfirmIsHostAction(false); onDeleteClick(meeting.meetingId); }}
+                                className="bg-white text-black border-2 border-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-200 transition-all duration-200 shadow-soft hover:shadow-medium whitespace-nowrap"
+                                title="Remove this meeting from your recent list"
+                              >
+                                Remove
+                              </button>
+                            );
+                          }
+
+                          // For non-ended meetings, keep previous behavior (single button: host=Delete, others=Remove)
                           const btnLabel = isHost ? "Delete" : "Remove";
                           const title = isHost
                             ? "Delete meeting for everyone"
                             : "Remove this meeting from your recent list";
                           return (
-                              <button
-                              onClick={() =>
-                                onDeleteClick(meeting.meetingId)
-                              }
+                            <button
+                              onClick={() => {
+                                setConfirmIsHostAction(!!isHost);
+                                onDeleteClick(meeting.meetingId);
+                              }}
                               className="bg-white text-black border-2 border-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-200 transition-all duration-200 shadow-soft hover:shadow-medium whitespace-nowrap"
                               title={title}
                             >
@@ -508,7 +558,7 @@ const Dashboard = () => {
           <div className="absolute inset-0 bg-black opacity-40" onClick={() => { setShowConfirm(false); setConfirmTarget(null); }}></div>
           <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-md mx-auto p-6 z-10">
             <h3 className="text-lg font-semibold text-neutral-900 mb-2">are you sure</h3>
-            <p className="text-sm text-neutral-600 mb-4">This action will remove the meeting from your list.</p>
+            <p className="text-sm text-neutral-600 mb-4">{confirmIsHostAction ? 'This will permanently delete the meeting for everyone.' : 'This will remove the meeting from your Recent Meetings list only.'}</p>
             <div className="flex justify-end items-center gap-3">
               <button onClick={() => { setShowConfirm(false); setConfirmTarget(null); }} className="px-4 py-2 rounded-lg bg-neutral-100 text-neutral-800 hover:bg-neutral-200">Cancel</button>
               <button onClick={confirmDeleteMeeting} className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800">Confirm</button>
