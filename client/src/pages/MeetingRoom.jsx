@@ -839,6 +839,30 @@ view.setUint32(4, 36 + samples.length * 2, true);
           }
           try {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+            try {
+              const vTrack = screenStream && screenStream.getVideoTracks && screenStream.getVideoTracks()[0];
+              let looksLikeScreen = false;
+              if (vTrack) {
+                const settings = vTrack.getSettings ? vTrack.getSettings() : {};
+                if (settings && settings.displaySurface) {
+                  looksLikeScreen = true;
+                } else {
+                  const label = vTrack.label || '';
+                  if (/screen|display|window|capture|presentation/i.test(label)) looksLikeScreen = true;
+                }
+              }
+              if (!looksLikeScreen) {
+                try { screenStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+                screenStream = null;
+                notify.error(
+                  'Screen recording was not started because Your mobile browser may not support true screen capture.'
+                );
+                return;
+              }
+            } catch (e) {
+              console.warn('Could not validate displayMedia track:', e);
+            }
           } catch (e) {
             console.warn("Screen capture not started on mobile", e);
             notify.error("Screen recording was not started. Please allow screen capture or try again.");
@@ -847,9 +871,28 @@ view.setUint32(4, 36 + samples.length * 2, true);
         } else {
           if (supportsDisplayMedia()) {
             try {
-              screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: true,
-              });
+              screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+              try {
+                const vTrack = screenStream && screenStream.getVideoTracks && screenStream.getVideoTracks()[0];
+                let looksLikeScreen = false;
+                if (vTrack) {
+                  const settings = vTrack.getSettings ? vTrack.getSettings() : {};
+                  if (settings && settings.displaySurface) {
+                    looksLikeScreen = true;
+                  } else {
+                    const label = vTrack.label || '';
+                    if (/screen|display|window|capture|presentation/i.test(label)) looksLikeScreen = true;
+                  }
+                }
+                if (!looksLikeScreen) {
+                  try { screenStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+                  screenStream = null;
+                  console.warn('getDisplayMedia returned a non-screen stream; falling back to camera.');
+                }
+              } catch (e) {
+                console.warn('Could not validate displayMedia track:', e);
+              }
             } catch (e) {
               screenStream = null;
               console.warn("Screen capture not started, falling back to camera", e);
