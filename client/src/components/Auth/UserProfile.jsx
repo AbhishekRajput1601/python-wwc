@@ -203,6 +203,22 @@ const UserProfile = () => {
     }
   };
 
+  const extractCaptionsFileUrl = (content) => {
+    if (!content) return null;
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.captions_file_path || parsed.captionsFilePath || parsed.captionsFile || null;
+    } catch (e) {
+      // fallback: find first http(s) url in content
+      try {
+        const m = String(content).match(/https?:\/\/[^\s"'<>]+/);
+        return m ? m[0].replace(/["',}]+$/g, "") : null;
+      } catch (e) {
+        return null;
+      }
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (name.startsWith("preferences.")) {
@@ -683,6 +699,23 @@ const UserProfile = () => {
                 </pre>
               </div>
               <div className="p-2 sm:p-3 border-t flex justify-end gap-2">
+                {/** Open in cloudinary in new tab if URL present */}
+                {(() => {
+                  const url = extractCaptionsFileUrl(captionsModalContent);
+                  return (
+                    <a
+                      href={url || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => {
+                        if (!url) e.preventDefault();
+                      }}
+                      className={`text-xs sm:text-sm px-2 sm:px-3 py-1 rounded ${url ? 'bg-neutral-100' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}
+                    >
+                      Open in new tab
+                    </a>
+                  );
+                })()}
                 <button
                   onClick={() => {
                     navigator.clipboard?.writeText(captionsModalContent || "");
