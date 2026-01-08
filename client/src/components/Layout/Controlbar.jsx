@@ -30,6 +30,7 @@ const Controlbar = ({
   meetingId,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   const handleLeave = async () => {
     try {
@@ -55,25 +56,39 @@ const Controlbar = ({
     if (navigate) navigate("/dashboard");
   };
 
-  const handleCopyLink = () => {
+  const handleShare = async () => {
     const meetingLink = `${window.location.origin}/meeting/${meetingId}`;
-    navigator.clipboard.writeText(meetingLink).then(
-      () => {
-        notify.success("Meeting link copied to clipboard!");
-      },
-      (err) => {
-        console.error("Could not copy text: ", err);
-        notify.error("Failed to copy link. Please copy manually: " + meetingLink);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Join my meeting",
+          text: "Join my meeting",
+          url: meetingLink,
+        });
+        return;
+      } catch (e) {
+        console.log("error in share button", e);
       }
-    );
+    }
+
+    try {
+      await navigator.clipboard.writeText(meetingLink);
+      notify.success("Meeting link copied to clipboard!");
+    } catch (err) {
+      console.error("Could not copy text: ", err);
+      notify.error("Failed to copy link. Please copy manually: " + meetingLink);
+    }
+
+    setShowShareMenu(true);
   };
   
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-white via-wwc-50 to-white border-t-2 border-wwc-700 px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 shadow-hard">
-      {/* More Menu Popup - appears above the control bar */}
-      {showMoreMenu && (
+
+        {showMoreMenu && (
         <div className="absolute bottom-full left-0 right-0 mb-1 mx-2 bg-gradient-to-br from-white to-wwc-50 border-2 border-wwc-700 rounded-lg shadow-hard p-1.5 md:hidden overflow-x-auto">
-          <div className="flex items-center space-x-1.5 min-w-max">
+          <div className="flex items-center justify-center space-x-1.5 w-full">
             {/* Participants */}
             <button
               onClick={() => {
@@ -87,19 +102,23 @@ const Controlbar = ({
               }`}
               title="Participants"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.196-2.121M9 6a3 3 0 106 0 3 3 0 00-6 0zM7 20a3 3 0 015.196-2.121M15 6a3 3 0 106 0 3 3 0 00-6 0z"
-                />
-              </svg>
+            <svg
+  className="w-4 h-4"
+  fill="none"
+  stroke="currentColor"
+  viewBox="0 0 24 24"
+>
+  <path
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    d="M3 21v-2a4 4 0 014-4h10a4 4 0 014 4v2"
+  />
+  <circle cx="8" cy="7" r="3" />
+  <circle cx="16" cy="7" r="3" />
+  <circle cx="12" cy="5" r="4" />
+</svg>
+
             </button>
 
             {/* Chat */}
@@ -130,14 +149,14 @@ const Controlbar = ({
               </svg>
             </button>
 
-            {/* Copy Link */}
+            {/* Share */}
             <button
               onClick={() => {
-                handleCopyLink();
+                handleShare();
                 setShowMoreMenu(false);
               }}
               className="p-1.5 rounded-md font-medium transition-all duration-200 border-2 border-wwc-700 flex items-center justify-center bg-white text-wwc-700 hover:bg-wwc-50"
-              title="Copy Link"
+              title="Share"
             >
               <svg
                 className="w-4 h-4"
@@ -153,6 +172,68 @@ const Controlbar = ({
                 />
               </svg>
             </button>
+            {showShareMenu && (
+              <div className="absolute bottom-full left-2 mb-2 bg-white border-2 border-wwc-700 rounded-md shadow-soft p-2 z-50">
+                <div className="flex space-x-2 items-center">
+                  <a
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent("Join my meeting: " + `${window.location.origin}/meeting/${meetingId}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    WhatsApp
+                  </a>
+                  <a
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                    href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/meeting/${meetingId}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Facebook
+                  </a>
+                  <a
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                    href={`https://twitter.com/intent/tweet?text=${encodeURIComponent("Join my meeting:")}&url=${encodeURIComponent(`${window.location.origin}/meeting/${meetingId}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Twitter
+                  </a>
+                  <a
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                    href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`${window.location.origin}/meeting/${meetingId}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    LinkedIn
+                  </a>
+                  <a
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                    href={`mailto:?subject=${encodeURIComponent("Join my meeting")}&body=${encodeURIComponent(`${window.location.origin}/meeting/${meetingId}`)}`}
+                    target="_self"
+                  >
+                    Email
+                  </a>
+                  <button
+                    onClick={() => {
+                      const link = `${window.location.origin}/meeting/${meetingId}`;
+                      navigator.clipboard.writeText(link).then(() => {
+                        notify.success("Meeting link copied to clipboard!");
+                      });
+                    }}
+                    className="px-2 py-1 rounded-md bg-wwc-50 text-wwc-700 text-sm"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setShowShareMenu(false)}
+                    className="px-2 py-1 rounded-md bg-white text-wwc-700 text-sm border-2 border-wwc-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Captions */}
             <button
@@ -209,63 +290,6 @@ const Controlbar = ({
               <option value="gu">Gujarati</option>
               <option value="mr">Marathi</option>
             </select>
-
-            {/* Screen Share */}
-            <button
-              onClick={() => {
-                toggleScreenShare();
-                setShowMoreMenu(false);
-              }}
-              className={`p-1.5 rounded-md font-medium transition-all duration-200 border-2 border-wwc-700 flex items-center justify-center ${
-                isScreenSharing
-                  ? "bg-gradient-to-br from-wwc-600 to-wwc-700 text-white shadow-soft"
-                  : "bg-white text-wwc-700 hover:bg-wwc-50"
-              }`}
-              title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 6.75C3 5.231 4.231 4 5.75 4h12.5C19.769 4 21 5.231 21 6.75v8.5C21 16.769 19.769 18 18.25 18H13l1.125 2.25H9.875L11 18H5.75C4.231 18 3 16.769 3 15.25v-8.5z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8.75 21h6.5"
-                />
-              </svg>
-            </button>
-
-            {/* Record */}
-            <button
-              onClick={() => {
-                if (isUploadingRecording) return;
-                if (isRecording) onStopRecording();
-                else onStartRecording();
-                setShowMoreMenu(false);
-              }}
-              disabled={isUploadingRecording}
-              className={`p-1.5 rounded-md font-medium transition-all duration-200 border-2 border-wwc-700 flex items-center justify-center ${
-                isUploadingRecording
-                  ? 'opacity-60 pointer-events-none bg-white text-wwc-400'
-                  : isRecording
-                  ? "bg-gradient-to-br from-red-600 to-red-700 text-white"
-                  : "bg-white text-wwc-700 hover:bg-wwc-50"
-              }`}
-              title={isUploadingRecording ? "Uploading..." : (isRecording ? "Stop Recording" : "Start Recording")}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="6" />
-              </svg>
-            </button>
           </div>
         </div>
       )}
@@ -328,9 +352,9 @@ const Controlbar = ({
           </button>
 
           <button
-            onClick={handleCopyLink}
+            onClick={handleShare}
             className="px-3 py-2 rounded-lg font-medium transition-all duration-200 border-2 border-wwc-700 text-sm flex items-center space-x-2 bg-white text-wwc-700 hover:bg-wwc-50"
-            title="Copy meeting link"
+            title="Share"
           >
             <svg
               className="w-4 h-4"
@@ -345,7 +369,7 @@ const Controlbar = ({
                 d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
               />
             </svg>
-            <span>Copy Link</span>
+            <span>Share</span>
           </button>
         </div>
 
