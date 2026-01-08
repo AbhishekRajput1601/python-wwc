@@ -676,8 +676,26 @@ async def end_meeting(sid, data):
             db = get_database()
             from app.services.meeting_service import MeetingService
             meeting_service = MeetingService(db)
- 
-            await meeting_service.end_meeting(meeting_id)
+
+          
+            updated_meeting = await meeting_service.end_meeting(meeting_id)
+
+            try:
+                if updated_meeting:
+                    caps_url = updated_meeting.get("captionsFilePath") or updated_meeting.get("captions_file_path")
+                    caps_text = updated_meeting.get("captionsText") or updated_meeting.get("captions_text")
+                    if caps_url or caps_text:
+                        await sio.emit(
+                            "captions-ready",
+                            {
+                                "meetingId": meeting_id,
+                                "captionsFilePath": caps_url,
+                                "captionsText": caps_text,
+                            },
+                            room=meeting_id,
+                        )
+            except Exception:
+                logger.exception("Failed to emit captions-ready for %s", meeting_id)
         except Exception:
             logger.exception("Failed to update meeting end state for %s", meeting_id)
 

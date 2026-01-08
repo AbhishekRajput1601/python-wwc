@@ -243,9 +243,9 @@ export default function MeetingStage({
       lastParticipantSetRef.current = currentParticipantSet;
       lastLayoutRef.current = { stageSize: { ...stageSize }, tilePx };
 
-      const { w, h } = stageSize;
-      const cx = w / 2;
-      const cy = h / 2;
+      const { w, h } = stageSize || { w: 0, h: 0 };
+      const cx = w / 2 || 0;
+      const cy = h / 2 || 0;
 
       const MIN_DISTANCE = tilePx * 0.85;
       const RING_GAP = tilePx * 0.9;
@@ -254,10 +254,12 @@ export default function MeetingStage({
       
       let ringIndex = 1;
       let placed = 0;
-      positionMapRef.current.clear();
+
+      // Build a new map first so we never leave the global map empty during computation
+      const newMap = new Map(positionMapRef.current);
 
       while (placed < sortedOthers.length) {
- 
+
         const radius = ringIndex * RING_GAP + tilePx * 0.5;
         const circumference = 2 * Math.PI * radius;
 
@@ -267,10 +269,14 @@ export default function MeetingStage({
         for (let i = 0; i < count; i++) {
           const angle = (2 * Math.PI * i) / count + ringIndex * 0.35; 
 
-          const x = cx + Math.cos(angle) * radius - tilePx / 2;
-          const y = cy + Math.sin(angle) * radius - tilePx / 2;
+          let x = cx + Math.cos(angle) * radius - tilePx / 2;
+          let y = cy + Math.sin(angle) * radius - tilePx / 2;
 
-          positionMapRef.current.set(sortedOthers[placed].key, { left: x, top: y });
+          // Clamp positions so tiles remain inside the stage bounds
+          x = Math.max(0, Math.min(x, Math.max(0, w - tilePx)));
+          y = Math.max(0, Math.min(y, Math.max(0, h - tilePx)));
+
+          newMap.set(sortedOthers[placed].key, { left: x, top: y });
           placed++;
         }
 
@@ -278,13 +284,20 @@ export default function MeetingStage({
     
         if (ringIndex > 100) break;
       }
+
+      // Swap the computed map in once complete
+      positionMapRef.current = newMap;
     } else {
       console.debug('[WWC] positions cached used', { currentParticipantSet, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
     }
 
+    // Ensure we return a sensible fallback (center) if a participant has no computed position yet
+    const fallbackX = (stageSize && stageSize.w ? stageSize.w / 2 - tilePx / 2 : 0);
+    const fallbackY = (stageSize && stageSize.h ? stageSize.h / 2 - tilePx / 2 : 0);
+
     return others.map(t => ({
       key: t.key,
-      ...(positionMapRef.current.get(t.key) || { left: 0, top: 0 })
+      ...(positionMapRef.current.get(t.key) || { left: fallbackX, top: fallbackY })
     }));
   }, [others, stageSize, tilePx]);
 

@@ -85,57 +85,56 @@ class CaptionService:
         try:
        
             converted_path = None
-            try:
-                if mime_type and 'wav' not in mime_type.lower():
+
+            if mime_type and 'wav' not in mime_type.lower():
+                try:
+                    converted_path = await convert_to_wav_file(audio_data, input_type=mime_type)
+                except Exception:
                     try:
-                        converted_path = await convert_to_wav_file(audio_data, input_type=mime_type)
+                        converted_path = await convert_to_wav_file(audio_data, input_type=None)
                     except Exception:
                         converted_path = None
 
-                if converted_path and os.path.exists(converted_path):
-                    target_path = converted_path
-                else:
+            if converted_path and os.path.exists(converted_path):
+                target_path = converted_path
+            else:
+            
+                try:
+                    converted_path = await convert_to_wav_file(audio_data, input_type=None)
+                    if converted_path and os.path.exists(converted_path):
+                        target_path = converted_path
+                    else:
+                        raise RuntimeError('Conversion returned no file')
+                except Exception:
+
                     fd, temp_path = tempfile.mkstemp(suffix='.wav', prefix='whisper_tmp_')
                     os.close(fd)
                     with open(temp_path, 'wb') as f:
                         f.write(audio_data)
                     target_path = temp_path
 
-                if not os.path.exists(target_path):
-                    raise FileNotFoundError(f"Saved temp file not found: {target_path}")
+            if not os.path.exists(target_path):
+                raise FileNotFoundError(f"Saved temp file not found: {target_path}")
 
-                segments, info = self.whisper_model.transcribe(
-                    target_path,
-                    language=language,
-                    task='translate' if translate else 'transcribe'
-                )
+            segments, info = self.whisper_model.transcribe(
+                target_path,
+                language=language,
+                task='translate' if translate else 'transcribe'
+            )
 
-                captions = []
-                for segment in segments:
-                    captions.append({
-                        'start': segment.start,
-                        'end': segment.end,
-                        'text': segment.text
-                    })
+            captions = []
+            for segment in segments:
+                captions.append({
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text
+                })
 
-                return {
-                    'success': True,
-                    'language': getattr(info, 'language', language),
-                    'captions': captions
-                }
-            finally:
-            
-                try:
-                    if converted_path and os.path.exists(converted_path):
-                        os.remove(converted_path)
-                except Exception:
-                    pass
-                try:
-                    if 'temp_path' in locals() and os.path.exists(temp_path):
-                        os.remove(temp_path)
-                except Exception:
-                    pass
-        
+            return {
+                'success': True,
+                'language': getattr(info, 'language', language),
+                'captions': captions
+            }
         except Exception as e:
             print(f'Whisper transcription error: {e}')
             return {
@@ -143,6 +142,17 @@ class CaptionService:
                 'message': 'Transcription failed',
                 'error': str(e)
             }
+        finally:
+            try:
+                if converted_path and os.path.exists(converted_path):
+                    os.remove(converted_path)
+            except Exception:
+                pass
+            try:
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
     
     async def delete_captions(self, meeting_id: str) -> bool:
         

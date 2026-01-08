@@ -785,10 +785,30 @@ view.setUint32(4, 36 + samples.length * 2, true);
 
     socket.on("meeting-ended", onMeetingEnded);
 
+    const onCaptionsReady = ({ meetingId: mid, captionsFilePath, captionsText }) => {
+      try {
+        if (captionsFilePath) {
+          notify.success('Captions file is available');
+        } else if (captionsText) {
+          notify.success('Captions text saved for this meeting');
+        }
+
+        setMeeting((prev) => {
+          if (!prev) return prev;
+          return { ...prev, captionsFilePath: captionsFilePath || prev.captionsFilePath, captionsText: captionsText || prev.captionsText };
+        });
+      } catch (e) {
+        console.warn('captions-ready handler error', e);
+      }
+    };
+
+    socket.on('captions-ready', onCaptionsReady);
+
     return () => {
       socket.off("user-started-screen-share", onStart);
       socket.off("user-stopped-screen-share", onStop);
       socket.off("meeting-ended", onMeetingEnded);
+      socket.off('captions-ready', onCaptionsReady);
       socket.off('caption-update', onCaptionUpdate);
       socket.off("camera-state-changed", onCameraStateChanged);
     };
