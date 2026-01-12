@@ -8,6 +8,7 @@ import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import MeetingRoom from './pages/MeetingRoom'
+import Policies from './pages/Policies'
 import Login from './components/Auth/Login'
 import Signup from './components/Auth/Signup'
 import ForgotPassword from './components/Auth/ForgotPassword'
@@ -41,6 +42,7 @@ function App() {
         {!hideNavbar && <Navbar />}
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/policies" element={<Policies />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -275,27 +275,10 @@ const Home = () => {
                   </li>
                   <li>
                     <Link
-                      to="/login"
-                      className="text-xs sm:text-sm text-neutral-300 hover:text-wwc-400 transition-colors duration-200"
-                    >
-                      Sign In
+                      to="/policies"
+                      className="text-xs sm:text-sm text-neutral-300 hover:text-wwc-400 transition-colors duration-200">
+                      Policies
                     </Link>
-                  </li>
-                  <li>
-                    <a
-                      href="#features"
-                      className="text-xs sm:text-sm text-neutral-300 hover:text-wwc-400 transition-colors duration-200"
-                    >
-                      Features
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="#about"
-                      className="text-xs sm:text-sm text-neutral-300 hover:text-wwc-400 transition-colors duration-200"
-                    >
-                      About
-                    </a>
                   </li>
                 </ul>
               </div>

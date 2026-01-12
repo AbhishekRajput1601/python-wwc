@@ -269,9 +269,6 @@ async def login(
         stored_type = type(stored).__name__
         stored_len = len(stored) if isinstance(stored, str) else None
 
-        logger.error(f"LOGIN: credentials.password type={pw_type} len={pw_len}")
-        logger.error(f"LOGIN: stored password type={stored_type} len={stored_len}")
-
         if not verify_password(credentials.password, stored):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

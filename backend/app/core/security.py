@@ -22,10 +22,10 @@ def normalize_password(password: str) -> str:
     if not isinstance(password, str):
         raise ValueError("Password must be a string")
 
-    logger.error(f"PASSWORD LENGTH = {len(password)}")
+  
 
     normalized = password.strip()[:72]
-    logger.error(f"NORMALIZED PASSWORD LENGTH = {len(normalized)}")
+    
     return normalized
 
 
