@@ -7,7 +7,7 @@ const VideoTile = ({ stream, label, isLocal = false, avatarChar = "U", participa
 
   React.useEffect(() => {
     if (!isLocal) {
-      console.log(`[WWC] VideoTile ${label}:`, { userId, cameraOn, hasStream: !!stream, hasVideo });
+      // console.log(`[WWC] VideoTile ${label}:`, { userId, cameraOn, hasStream: !!stream, hasVideo });
     }
   }, [cameraOn, hasVideo, stream, isLocal, label, userId]);
 
@@ -239,7 +239,6 @@ export default function MeetingStage({
     const participantsChanged = currentParticipantSet !== lastParticipantSetRef.current;
 
     if (participantsChanged || layoutChanged) {
-      console.debug('[WWC] positions recompute', { participantsChanged, layoutChanged, currentParticipantSet, lastParticipantSet: lastParticipantSetRef.current, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
       lastParticipantSetRef.current = currentParticipantSet;
       lastLayoutRef.current = { stageSize: { ...stageSize }, tilePx };
 
@@ -255,7 +254,6 @@ export default function MeetingStage({
       let ringIndex = 1;
       let placed = 0;
 
-      // Build a new map first so we never leave the global map empty during computation
       const newMap = new Map(positionMapRef.current);
 
       while (placed < sortedOthers.length) {
@@ -271,8 +269,6 @@ export default function MeetingStage({
 
           let x = cx + Math.cos(angle) * radius - tilePx / 2;
           let y = cy + Math.sin(angle) * radius - tilePx / 2;
-
-          // Clamp positions so tiles remain inside the stage bounds
           x = Math.max(0, Math.min(x, Math.max(0, w - tilePx)));
           y = Math.max(0, Math.min(y, Math.max(0, h - tilePx)));
 
@@ -285,13 +281,11 @@ export default function MeetingStage({
         if (ringIndex > 100) break;
       }
 
-      // Swap the computed map in once complete
       positionMapRef.current = newMap;
     } else {
-      console.debug('[WWC] positions cached used', { currentParticipantSet, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
+      // console.debug('[WWC] positions cached used', { currentParticipantSet, stageSize, tilePx, othersOrder: others.map(t=>t.key) });
     }
 
-    // Ensure we return a sensible fallback (center) if a participant has no computed position yet
     const fallbackX = (stageSize && stageSize.w ? stageSize.w / 2 - tilePx / 2 : 0);
     const fallbackY = (stageSize && stageSize.h ? stageSize.h / 2 - tilePx / 2 : 0);
 
@@ -408,7 +402,7 @@ export default function MeetingStage({
 
   return (
     <>
-      {/* Mobile View - Vertical Scrollable Layout */}
+
       <div className="sm:hidden flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden p-2 space-y-3">
         {/* Host Tile */}
         <div className="flex flex-col items-center flex-shrink-0">

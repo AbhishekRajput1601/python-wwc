@@ -126,7 +126,6 @@ const MeetingRoom = () => {
  
     if (socket) {
       const userId = user?._id || user?.id;
-      console.log("[WWC] Emitting camera-state-changed:", { userId, isVideoOn: newState });
       socket.emit("camera-state-changed", {
         userId: userId,
         isVideoOn: newState,
@@ -141,10 +140,8 @@ const MeetingRoom = () => {
       try {
         if (socket) {
           if (next) {
-            console.log('[WWC] emitting start_captions', { meetingId, language: selectedLanguage });
             socket.emit('start_captions', { meetingId, language: selectedLanguage });
           } else {
-            console.log('[WWC] emitting stop_captions', { meetingId });
             socket.emit('stop_captions', { meetingId });
           }
         }
@@ -170,7 +167,6 @@ const MeetingRoom = () => {
       try {
  
         if (showCaptions) {
-          console.debug('[WWC] emitting audio-data (wav)', { meetingId, bytes: buffer.length });
           socket.emit('audio-data', {
             meetingId,
             audioData: buffer.buffer,
@@ -268,7 +264,6 @@ const MeetingRoom = () => {
             const chunkMime = recorder && recorder.mimeType ? recorder.mimeType : (mimeType || 'audio/webm');
  
             if (showCaptions) {
-              console.debug('[WWC] emitting audio-data (chunk)', { meetingId, size: e.data.size, mime: chunkMime });
               socket.emit('audio-data', {
                 meetingId,
                 audioData: arrayBuffer,
@@ -399,7 +394,7 @@ view.setUint32(4, 36 + samples.length * 2, true);
               await pc.setLocalDescription(offer);
               socket.emit("offer", { offer, targetSocketId: socketId });
             } catch (e) {
-              console.error('[WWC] Error renegotiating for screen share:', e);
+              console.error('[WWC] Error renegotiating after starting screen share:', e);
             }
           }
         }
@@ -501,7 +496,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
           },
         });
         if (!isMounted) return;
-        console.log('[WWC] Local stream tracks:', localStream.getTracks().map(t => `${t.kind}/${t.id.substring(0, 8)}`));
         setMediaStream(localStream);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = localStream;
@@ -510,7 +504,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         const sock = io(SOCKET_SERVER_URL, { transports: ["websocket"] });
         setSocket(sock);
         sock.on("connect", () => {
-          console.log('[WWC] socket connected', sock.id);
           setSelfSocketId(sock.id);
   
           Object.values(peerConnections.current).forEach((pc) => pc.close());
@@ -522,7 +515,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
 
         const onCaptionUpdateEarly = (payload) => {
           try {
-            console.log('[WWC] received caption-update', payload);
             const text = payload?.text || payload?.original_text || "";
             setCurrentCaption(text || "");
           } catch (e) {
@@ -532,7 +524,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         sock.on('caption-update', onCaptionUpdateEarly);
 
         const userIdToSend = user?._id || user?.id;
-        console.log("[WWC] Joining meeting with user:", { userId: userIdToSend, userName: user?.name, fullUser: user });
         sock.emit("join-meeting", {
           meetingId,
           userId: userIdToSend,
@@ -562,7 +553,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         });
 
         sock.on("existing-participants", (existing) => {
-          console.log("[WWC] existing-participants received:", existing);
 
           const mapped = existing.map(p => ({ ...p }));
           const uniqByUser = Array.from(
@@ -575,7 +565,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
           });
 
           setParticipants(uniqByUser);
-          console.log("[WWC] participants set to:", uniqByUser);
 
           uniqByUser.forEach((p) => {
             createPeerConnection(p.socketId, localStream, sock, true, p.userId);
@@ -583,7 +572,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         });
 
         sock.on("user-joined", (data) => {
-          console.log("[WWC] user-joined received:", data);
           if (data.socketId === sock.id) return;
 
           setParticipants((prev) => {
@@ -597,7 +585,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         });
 
         sock.on("user-reconnected", ({ userId, userName, oldSocketId, newSocketId }) => {
-          console.log('[WWC] user-reconnected', { userId, oldSocketId, newSocketId });
 
           setParticipants(prev => prev.filter(p => p.socketId !== oldSocketId));
 
@@ -658,7 +645,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
         });
 
         sock.on("user-left", ({ socketId, userId }) => {
-          console.log("User left:", socketId, userId);
 
           setParticipants((prev) => prev.filter((p) => p.socketId !== socketId && String(p.userId) !== String(userId)));
 
@@ -713,7 +699,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
           : meeting.host._id || meeting.host.id;
 
       if (id) {
-        console.log("[WWC] Setting hostId from meeting data:", String(id));
         setHostId(String(id));
       }
     }
@@ -723,7 +708,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
     if (!socket) return;
 
     const onHostUpdated = ({ hostId }) => {
-      console.log("[WWC] host-updated event received:", hostId);
       setHostId(String(hostId));
     };
 
@@ -743,10 +727,8 @@ view.setUint32(4, 36 + samples.length * 2, true);
     socket.on("user-stopped-screen-share", onStop);
 
     const onCameraStateChanged = ({ userId, isVideoOn }) => {
-      console.log("[WWC] camera-state-changed received:", { userId, isVideoOn });
       setCameraStates(prev => {
         const updated = { ...prev, [userId]: isVideoOn };
-        console.log("[WWC] Updated cameraStates:", updated);
         return updated;
       });
     };
@@ -836,7 +818,6 @@ view.setUint32(4, 36 + samples.length * 2, true);
       else if (meeting.host.id) hostId = String(meeting.host.id);
       else hostId = String(meeting.host);
     }
-    console.log('[DEBUG] isCreator check:', { userId, hostId, isMatch: hostId && String(hostId) === userId });
     return hostId && String(hostId) === userId;
   })();
 
@@ -1064,15 +1045,12 @@ view.setUint32(4, 36 + samples.length * 2, true);
     
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnections.current[socketId] = pc;
-    console.log('[WWC] Created peer connection for:', socketId, '| Total peers:', Object.keys(peerConnections.current).length);
 
     localStream.getTracks().forEach((track) => {
-      console.log('[WWC] Adding track to peer:', track.kind, track.id.substring(0, 8), '-> socketId:', socketId);
       pc.addTrack(track, localStream);
     });
 
     pc.ontrack = (event) => {
-      console.log('[WWC] Received track:', event.track.kind, event.track.id.substring(0, 8), 'from:', socketId);
       const uid = socketIdToUserId.current[socketId] || userId || null;
       const key = uid || socketId;
 
@@ -1081,13 +1059,13 @@ view.setUint32(4, 36 + samples.length * 2, true);
         if (existingStream) {
           const trackExists = existingStream.getTracks().some(t => t.id === event.track.id);
           if (!trackExists) {
-            try { existingStream.addTrack(event.track); } catch (e) {}
-            console.log('[WWC] Added track to existing stream. Total tracks:', existingStream.getTracks().length);
+            try { existingStream.addTrack(event.track); } catch (e) {
+              console.error('[WWC] Error adding track to existing stream:', e);
+            }
           }
           return { ...prev };
         } else {
           const newStream = new MediaStream([event.track]);
-          console.log('[WWC] Created new stream for key:', key);
           return { ...prev, [key]: newStream };
         }
       });

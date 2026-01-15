@@ -209,7 +209,6 @@ const UserProfile = () => {
       const parsed = JSON.parse(content);
       return parsed.captions_file_path || parsed.captionsFilePath || parsed.captionsFile || null;
     } catch (e) {
-      // fallback: find first http(s) url in content
       try {
         const m = String(content).match(/https?:\/\/[^\s"'<>]+/);
         return m ? m[0].replace(/["',}]+$/g, "") : null;

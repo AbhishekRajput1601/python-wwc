@@ -74,9 +74,6 @@ async def join_meeting(sid, data):
     meeting_id = data.get("meetingId")
     user_id = data.get("userId")
     user_name = data.get("userName", "User")
-    
-    logger.info(f"[WWC] User {user_name} ({user_id}) joining meeting: {meeting_id}")
-    logger.info(f"[WWC] join_meeting data received: {data}")
 
     host_id = None
     try:
@@ -178,7 +175,6 @@ async def join_meeting(sid, data):
                 "userName": user["name"]
             })
     
-    logger.info(f"[WWC] Sending existing_participants to {sid}: {existing_participants}")
     await sio.emit("existing-participants", existing_participants, to=sid)
 
     if host_id:
@@ -236,13 +232,12 @@ async def handle_camera_state_changed(sid, data):
 
     meeting_id = socket_to_meeting.get(sid)
     if not meeting_id:
-        logger.warning(f"[WWC] camera-state-changed: No meeting found for socket {sid}")
         return
     
     user_id = data.get("userId")
     is_video_on = data.get("isVideoOn")
     
-    logger.info(f"[WWC] Camera state changed for user {user_id}: {is_video_on} in meeting {meeting_id}")
+
 
     await sio.emit(
         "camera-state-changed",
